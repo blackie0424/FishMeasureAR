@@ -1,0 +1,26 @@
+name: FishMeasureAR
+options:
+  bundleIdPrefix: com.blackie
+  deploymentTarget:
+    iOS: "17.0"
+targets:
+  FishMeasureAR:
+    type: application
+    platform: iOS
+    sources:
+      - Sources
+    settings:
+      base:
+        SWIFT_VERSION: 5.9
+        TARGETED_DEVICE_FAMILY: 1
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        DEVELOPMENT_TEAM: ""   # 填入你的 Apple Developer Team ID
+    info:
+      path: Sources/Info.plist
+      properties:
+        UIRequiredDeviceCapabilities: [arkit]
+        NSCameraUsageDescription: 需要相機進行 AR 魚長測量與拍攝。
+        NSLocationWhenInUseUsageDescription: 記錄漁獲的釣點位置。可在設定中啟用釣點隱私模式,或拒絕授權仍可使用測量功能。
+        NSPhotoLibraryAddUsageDescription: 將測量完成的漁獲照片儲存到你的相簿。
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        CADisableMinimumFrameDurationOnPhone: true
