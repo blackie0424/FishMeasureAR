@@ -14,7 +14,7 @@ struct FishMeasureARApp: App {
 struct RootView: View {
     var body: some View {
         TabView {
-            MeasureScreen()
+            MeasureFlowScreen()
                 .tabItem { Label("測量", systemImage: "ruler") }
 
             JournalListView()

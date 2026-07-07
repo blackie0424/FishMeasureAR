@@ -6,8 +6,9 @@ import Foundation
 final class CatchRecord {
     var id: UUID
     var createdAt: Date
-    var lengthCM: Double
-    var measureMethod: String        // "auto-lidar" | "auto-plane" | "manual"
+    /// 未量測(連拍待量或無比例尺)時為 nil
+    var lengthCM: Double?
+    var measureMethod: String        // "auto-lidar" | "auto-plane" | "manual-scale"
     var latitude: Double?
     var longitude: Double?
     var horizontalAccuracy: Double?
@@ -15,13 +16,22 @@ final class CatchRecord {
     var isLocationFuzzed: Bool
     var photoLocalID: String
     var speciesName: String?
+    var fishingMethod: String?       // 岸釣/船釣/磯釣/刺網/一支釣
     var note: String?
     var referenceObjectsUsed: [String]
+    /// 之後上傳調查平台用;目前一律 false(⟳ 待傳)
+    var isSynced: Bool
 
-    init(lengthCM: Double,
+    /// - Parameters:
+    ///   - location: 欲儲存的座標。隱私模式的模糊化由呼叫端先行處理,
+    ///     並以 isLocationFuzzed 如實標記,模型本身不讀取全域設定。
+    init(lengthCM: Double?,
          measureMethod: String,
+         species: String?,
+         fishingMethod: String?,
          location: CLLocation?,
          placeName: String?,
+         isLocationFuzzed: Bool,
          photoLocalID: String,
          referenceObjectsUsed: [String]) {
         self.id = UUID()
@@ -32,10 +42,18 @@ final class CatchRecord {
         self.longitude = location?.coordinate.longitude
         self.horizontalAccuracy = location?.horizontalAccuracy
         self.placeName = placeName
-        self.isLocationFuzzed = AppSettings().fuzzLocation
+        self.isLocationFuzzed = isLocationFuzzed
         self.photoLocalID = photoLocalID
-        self.speciesName = nil
+        self.speciesName = species
+        self.fishingMethod = fishingMethod
         self.note = nil
         self.referenceObjectsUsed = referenceObjectsUsed
+        self.isSynced = false
+    }
+}
+
+extension CatchRecord {
+    var lengthLabel: String {
+        lengthCM.map { String(format: "%.1f cm", $0) } ?? "未量測"
     }
 }

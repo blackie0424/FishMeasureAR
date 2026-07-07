@@ -3,12 +3,19 @@ options:
   bundleIdPrefix: com.blackie
   deploymentTarget:
     iOS: "17.0"
+packages:
+  FishMeasureKit:
+    path: FishMeasureKit
 targets:
   FishMeasureAR:
     type: application
     platform: iOS
     sources:
       - Sources
+    dependencies:
+      - package: FishMeasureKit
+    scheme:
+      testTargets: []
     settings:
       base:
         SWIFT_VERSION: 5.9
