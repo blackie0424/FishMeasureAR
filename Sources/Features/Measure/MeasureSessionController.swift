@@ -3,6 +3,13 @@ import RealityKit
 import SwiftUI
 import Combine
 
+/// 將未標記 Sendable 的參照型別包裝為可安全跨執行緒傳遞。
+/// 僅用於「建立後即唯讀」的相機資料(如 CVPixelBuffer),於背景佇列僅做讀取。
+struct UncheckedSendable<Value>: @unchecked Sendable {
+    let value: Value
+    init(_ value: Value) { self.value = value }
+}
+
 /// 測量狀態(供 UI 顯示)
 enum MeasureStatus: Equatable {
     case searching          // 黃:偵測中
@@ -58,23 +65,32 @@ final class MeasureSessionController: NSObject, ObservableObject, ARSessionDeleg
 
     nonisolated func session(_ session: ARSession, didUpdate frame: ARFrame) {
         Task { @MainActor in
-            self.processFrameIfNeeded(frame)
+            await self.processFrameIfNeeded(frame)
         }
     }
 
-    private func processFrameIfNeeded(_ frame: ARFrame) {
+    private func processFrameIfNeeded(_ frame: ARFrame) async {
         frameCounter += 1
         guard frameCounter % processEveryNFrames == 0, !isProcessing else { return }
         isProcessing = true
 
-        let pixelBuffer = frame.capturedImage
         // capturedImage 為 landscape,App 固定 portrait → .right
-        visionQueue.async { [weak self] in
-            let result = FishSegmentation.detectEndpoints(in: pixelBuffer,
-                                                          orientation: .right)
-            Task { @MainActor in
-                self?.handleSegmentation(result, frame: frame)
-                self?.isProcessing = false
+        // CVPixelBuffer 未標記 Sendable,以包裝跨執行緒(唯讀)傳遞至 vision 佇列
+        let pixelBuffer = UncheckedSendable(frame.capturedImage)
+        let result = await detectEndpoints(in: pixelBuffer)
+        // 回到 MainActor;frame 全程未離開主執行緒隔離域
+        handleSegmentation(result, frame: frame)
+        isProcessing = false
+    }
+
+    /// 於 vision 佇列執行分割,避免阻塞主執行緒;結果(Sendable)再回傳 MainActor。
+    private func detectEndpoints(in pixelBuffer: UncheckedSendable<CVPixelBuffer>)
+        async -> FishSegmentation.Result? {
+        await withCheckedContinuation { continuation in
+            visionQueue.async {
+                let result = FishSegmentation.detectEndpoints(in: pixelBuffer.value,
+                                                              orientation: .right)
+                continuation.resume(returning: result)
             }
         }
     }

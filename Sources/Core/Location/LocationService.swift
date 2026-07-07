@@ -1,7 +1,10 @@
-import CoreLocation
+@preconcurrency import CoreLocation
 
 /// 定位服務:授權、單次定位、反向地理編碼。
 /// 拒絕授權時所有方法回傳 nil,測量功能不受影響。
+/// 綁定 MainActor:CLLocationManager 及其 delegate 皆在主執行緒運作,
+/// 也讓內部可變狀態(continuation)符合並行安全規範。
+@MainActor
 final class LocationService: NSObject, CLLocationManagerDelegate {
     private let manager = CLLocationManager()
     private var continuation: CheckedContinuation<CLLocation?, Never>?
@@ -26,11 +29,20 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
         return await withCheckedContinuation { cont in
             self.continuation = cont
             manager.requestLocation()
+            // 10 秒逾時:asyncAfter 於主佇列執行,故可安全 assumeIsolated 回到 MainActor
             DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
-                self?.continuation?.resume(returning: self?.manager.location)
-                self?.continuation = nil
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    self.finish(with: self.manager.location)
+                }
             }
         }
+    }
+
+    /// 統一收斂 continuation,確保只 resume 一次
+    private func finish(with location: CLLocation?) {
+        continuation?.resume(returning: location)
+        continuation = nil
     }
 
     /// 反向地理編碼(離線時回傳 nil,之後可由日誌補查)
@@ -50,12 +62,10 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
     // MARK: CLLocationManagerDelegate
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        continuation?.resume(returning: locations.first)
-        continuation = nil
+        finish(with: locations.first)
     }
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        continuation?.resume(returning: nil)
-        continuation = nil
+        finish(with: nil)
     }
 }

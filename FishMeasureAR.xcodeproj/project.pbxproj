@@ -26,7 +26,7 @@
 		230B25F40A01278E211A63F2 /* ReferenceObjects.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReferenceObjects.swift; sourceTree = "<group>"; };
 		4CF54662BC841C93938634CE /* FishMeasureARApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FishMeasureARApp.swift; sourceTree = "<group>"; };
 		57F9C1028D58589BECA22A2B /* JournalViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalViews.swift; sourceTree = "<group>"; };
-		6425610DC261C3E6241DFB3B /* FishMeasureAR.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = FishMeasureAR.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		6425610DC261C3E6241DFB3B /* FishMeasureAR.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FishMeasureAR.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		66713FE1BD4732B070A4F34A /* FishSegmentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FishSegmentation.swift; sourceTree = "<group>"; };
 		8795403DF21104F1386C4992 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		C2942A448BD00F786ABE20B4 /* MeasureSessionController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeasureSessionController.swift; sourceTree = "<group>"; };
@@ -155,20 +155,6 @@
 			path = Persistence;
 			sourceTree = "<group>";
 		};
-		"TEMP_1162E17F-8353-4574-97F6-C9FA8AD125ED" /* {Measure,ReferenceObjects,Capture,Journal,Settings},Core */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = "{Measure,ReferenceObjects,Capture,Journal,Settings},Core";
-			sourceTree = "<group>";
-		};
-		"TEMP_8243F7C8-204A-4BB8-AA34-F39C04101756" /* {App,Features */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = "{App,Features";
-			sourceTree = "<group>";
-		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -197,11 +183,6 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
-				TargetAttributes = {
-					9800943915637CEC960C4A9B = {
-						DevelopmentTeam = "";
-					};
-				};
 			};
 			buildConfigurationList = AC962AB8796980D34B654BA8 /* Build configuration list for PBXProject "FishMeasureAR" */;
 			developmentRegion = en;
@@ -313,7 +294,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = HAHR86V8E7;
 				INFOPLIST_FILE = Sources/Info.plist;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -332,7 +313,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = HAHR86V8E7;
 				INFOPLIST_FILE = Sources/Info.plist;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
