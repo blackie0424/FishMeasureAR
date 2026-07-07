@@ -31,7 +31,7 @@ struct AdjustFishView: View {
                         p.addLine(to: v2)
                     }
                     .stroke(Color.cyan,
-                            style: StrokeStyle(lineWidth: 3, dash: [2, 7], lineCap: .round))
+                            style: StrokeStyle(lineWidth: 3, lineCap: .round, dash: [2, 7]))
                     .allowsHitTesting(false)
 
                     DragHandle(position: v1, color: .cyan) { location in

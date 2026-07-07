@@ -34,7 +34,7 @@ struct ScaleStepView: View {
                         p.addLine(to: f2)
                     }
                     .stroke(Color.cyan.opacity(0.5),
-                            style: StrokeStyle(lineWidth: 2, dash: [2, 7], lineCap: .round))
+                            style: StrokeStyle(lineWidth: 2, lineCap: .round, dash: [2, 7]))
                     .allowsHitTesting(false)
 
                     if coordinator.selectedReference.lengthCM != nil {
@@ -43,7 +43,7 @@ struct ScaleStepView: View {
                             p.addLine(to: s2)
                         }
                         .stroke(Color.orange,
-                                style: StrokeStyle(lineWidth: 3, dash: [6, 4], lineCap: .round))
+                                style: StrokeStyle(lineWidth: 3, lineCap: .round, dash: [6, 4]))
                         .allowsHitTesting(false)
 
                         DragHandle(position: s1, color: .orange) { location in
