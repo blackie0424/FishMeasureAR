@@ -11,28 +11,31 @@ enum CaptureError: Error {
     case photoLibraryDenied
 }
 
-/// 拍攝服務:AR 快照 → 浮水印合成 → 寫入 EXIF GPS → 存入相簿
+/// 拍攝服務:AR 快照、浮水印合成 → 寫入 EXIF GPS → 存入相簿
 final class CaptureService {
 
-    /// 回傳 PHAsset localIdentifier
+    /// AR 畫面快照(工作流「凍結」當前影像用)
     @MainActor
-    func captureAndSave(arView: ARView,
-                        lengthCM: Double,
-                        location: CLLocation?,
-                        placeName: String?) async throws -> String {
-
-        let snapshot: UIImage = try await withCheckedThrowingContinuation { cont in
+    func snapshot(from arView: ARView) async throws -> UIImage {
+        try await withCheckedThrowingContinuation { cont in
             arView.snapshot(saveToHDR: false) { image in
                 if let image { cont.resume(returning: image) }
                 else { cont.resume(throwing: CaptureError.snapshotFailed) }
             }
         }
+    }
+
+    /// 浮水印 + EXIF + 相簿。回傳 PHAsset localIdentifier。
+    func save(image: UIImage,
+              lengthCM: Double?,
+              location: CLLocation?,
+              placeName: String?) async throws -> String {
 
         let settings = AppSettings()
         let final = settings.watermarkEnabled
-            ? addWatermark(to: snapshot, lengthCM: lengthCM,
+            ? addWatermark(to: image, lengthCM: lengthCM,
                            placeName: settings.watermarkShowsPlace ? placeName : nil)
-            : snapshot
+            : image
 
         // 依隱私設定決定寫入的座標(模糊化或原始)
         let gpsLocation: CLLocation? = {
@@ -46,7 +49,7 @@ final class CaptureService {
 
     // MARK: 浮水印
 
-    private func addWatermark(to image: UIImage, lengthCM: Double, placeName: String?) -> UIImage {
+    private func addWatermark(to image: UIImage, lengthCM: Double?, placeName: String?) -> UIImage {
         let renderer = UIGraphicsImageRenderer(size: image.size)
         return renderer.image { ctx in
             image.draw(at: .zero)
@@ -54,7 +57,9 @@ final class CaptureService {
             let dateStr = DateFormatter.localizedString(from: .now,
                                                         dateStyle: .medium,
                                                         timeStyle: .short)
-            var lines = [String(format: "%.1f cm", lengthCM), dateStr]
+            var lines = [String]()
+            if let lengthCM { lines.append(String(format: "%.1f cm", lengthCM)) }
+            lines.append(dateStr)
             if let placeName { lines.append(placeName) }
 
             let fontSize = image.size.width * 0.035

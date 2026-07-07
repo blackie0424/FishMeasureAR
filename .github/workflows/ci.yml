@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  # 純邏輯套件:Linux 上跑單元測試(快、免 macOS runner 排隊)
+  kit-tests:
+    name: FishMeasureKit tests
+    runs-on: ubuntu-latest
+    container: swift:6.0
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run tests
+        run: swift test --package-path FishMeasureKit
+
+  # App 目標:macOS 上以 iOS Simulator 目的地確認可編譯
+  app-build:
+    name: App build (iOS Simulator)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate project
+        run: xcodegen generate
+      - name: Build
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project FishMeasureAR.xcodeproj \
+            -scheme FishMeasureAR \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO

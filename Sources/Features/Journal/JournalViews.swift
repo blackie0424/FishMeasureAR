@@ -43,7 +43,7 @@ struct CatchRow: View {
                 .clipShape(RoundedRectangle(cornerRadius: 10))
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(String(format: "%.1f cm", record.lengthCM))
+                Text(record.lengthLabel)
                     .font(.headline)
                 Text(record.createdAt, style: .date)
                     .font(.caption).foregroundStyle(.secondary)
@@ -70,8 +70,11 @@ struct CatchDetailView: View {
                     .listRowInsets(EdgeInsets())
             }
             Section("測量") {
-                LabeledContent("魚長", value: String(format: "%.1f cm", record.lengthCM))
+                LabeledContent("魚長", value: record.lengthLabel)
                 LabeledContent("方式", value: record.measureMethod)
+                if let method = record.fishingMethod {
+                    LabeledContent("漁法", value: method)
+                }
                 LabeledContent("時間", value: record.createdAt.formatted())
             }
             Section("釣點") {
@@ -114,7 +117,7 @@ struct JournalMapView: View {
         NavigationStack {
             Map {
                 ForEach(located) { record in
-                    Annotation(String(format: "%.0fcm", record.lengthCM),
+                    Annotation(record.lengthCM.map { String(format: "%.0fcm", $0) } ?? "未量測",
                                coordinate: CLLocationCoordinate2D(latitude: record.latitude!,
                                                                   longitude: record.longitude!)) {
                         Image(systemName: "fish.fill")
