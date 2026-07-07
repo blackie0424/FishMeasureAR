@@ -6,13 +6,13 @@ final class CSVExporterTests: XCTestCase {
     private let utc = TimeZone(identifier: "UTC")!
 
     private func entry(species: String = "吳郭魚",
-                       length: Double? = 31.25,
+                       length: Double? = 31.24,
                        method: String? = "岸釣",
                        lat: Double? = 25.108, lon: Double? = 121.923,
                        place: String? = "龍洞漁港",
                        synced: Bool = false) -> CatchEntry {
         CatchEntry(species: species, lengthCM: length, method: method,
-                   capturedAt: Date(timeIntervalSince1970: 1_783_500_000), // 2026-07-08 04:00:00 UTC
+                   capturedAt: Date(timeIntervalSince1970: 1_783_468_800), // 2026-07-08 00:00:00 UTC
                    latitude: lat, longitude: lon, placeName: place, isSynced: synced)
     }
 
@@ -28,7 +28,7 @@ final class CSVExporterTests: XCTestCase {
         let csv = CSVExporter.export([entry()], timeZone: utc)
         let row = csv.split(separator: "\n").dropFirst().first!
         XCTAssertEqual(String(row),
-            "吳郭魚,31.3,岸釣,2026-07-08 04:00:00,25.108,121.923,龍洞漁港,0",
+            "吳郭魚,31.2,岸釣,2026-07-08 00:00:00,25.108,121.923,龍洞漁港,0",
             "長度輸出到 0.1cm;時間用指定時區;synced 用 0/1")
     }
 
@@ -37,7 +37,7 @@ final class CSVExporterTests: XCTestCase {
             [entry(length: nil, method: nil, lat: nil, lon: nil, place: nil)],
             timeZone: utc)
         let row = csv.split(separator: "\n").dropFirst().first!
-        XCTAssertEqual(String(row), "吳郭魚,,,2026-07-08 04:00:00,,,,0")
+        XCTAssertEqual(String(row), "吳郭魚,,,2026-07-08 00:00:00,,,,0")
     }
 
     func testFieldsWithCommaOrQuoteAreEscaped() {
