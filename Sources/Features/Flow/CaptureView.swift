@@ -18,54 +18,92 @@ struct ARViewContainer: UIViewRepresentable {
     func updateUIView(_ uiView: ARView, context: Context) {}
 }
 
-// MARK: - 拍照畫面(仿 iOS 測距儀:準星 + ＋ 設點)
+// MARK: - 拍照畫面
+// 版面:上下黑帶放所有控制項,中間 3:4 相機預覽保持乾淨;
+// 預覽區只有準星、貼在量測線上的數字氣泡。
+// 操作:唯一主按鈕依情境切換——「＋」設 A、B 點 → 兩點齊備變快門。
 
 struct CaptureView: View {
     @ObservedObject var coordinator: MeasureFlowCoordinator
     @StateObject private var controller = TapMeasureSessionController()
     @State private var flash = false
-    @State private var gpsLabel: String?
     @Query private var records: [CatchRecord]
 
     var body: some View {
-        ZStack {
-            ARViewContainer(controller: controller)
-                .ignoresSafeArea()
-
-            reticle
-
-            VStack {
-                hintBadge
-                if coordinator.flow.mode == .burst { burstBar.padding(.top, 6) }
-                Spacer()
-                lengthBadge
-                controlBar
-                HStack {
-                    gpsBadge
-                    Spacer()
-                    modeToggle
-                    recordCountButton
-                }
-            }
-            .padding()
-
-            if flash {
-                Color.white.ignoresSafeArea().allowsHitTesting(false)
-            }
+        VStack(spacing: 0) {
+            topBar
+            preview
+            bottomBar
         }
+        .background(Color.black.ignoresSafeArea())
         .onAppear { coordinator.locationService.requestAuthorization() }
         .onDisappear { controller.pause() }
-        .task {
-            let location = await coordinator.locationService.currentLocation()
-            let place = await coordinator.locationService.reverseGeocode(location)
-            if let c = location?.coordinate {
-                gpsLabel = String(format: "%.3f, %.3f", c.latitude, c.longitude)
-                    + (place.map { " · \($0)" } ?? "")
+    }
+
+    // MARK: 上黑帶:狀態列 + 提示
+
+    private var topBar: some View {
+        VStack(spacing: 8) {
+            HStack {
+                if coordinator.flow.mode == .burst {
+                    burstBadge
+                } else {
+                    modeToggle
+                }
+                Spacer()
+                recordCountButton
             }
+            Text(hintText)
+                .font(.footnote.bold())
+                .foregroundStyle(hintColor)
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+        .padding(.bottom, 12)
+        .frame(maxWidth: .infinity)
+    }
+
+    private var hintText: String {
+        if coordinator.flow.mode == .burst {
+            return "連拍中:按快門拍照,稍後於統計頁補量"
+        }
+        if !controller.reticleHasSurface && controller.measure.points.isEmpty {
+            return "緩慢移動手機,讓準星對到魚身(準星變綠)"
+        }
+        switch controller.measure.points.count {
+        case 0:  return "準星對準吻端,按「＋」標 A 點"
+        case 1:  return "移到尾叉,按「＋」標 B 點"
+        default: return "量測完成,按快門拍照"
         }
     }
 
-    // MARK: 準星(僅螢幕顯示,不入快照)
+    private var hintColor: Color {
+        controller.measure.isComplete ? .green : .yellow
+    }
+
+    // MARK: 中間:相機預覽(3:4)
+
+    private var preview: some View {
+        ZStack {
+            ARViewContainer(controller: controller)
+
+            reticle
+
+            if let mid = controller.lineMidpointInView,
+               let cm = controller.lengthCM ?? controller.previewLengthCM {
+                lengthBubble(cm: cm, final: controller.measure.isComplete)
+                    .position(mid)
+                    .allowsHitTesting(false)
+            }
+
+            if flash {
+                Color.white.allowsHitTesting(false)
+            }
+        }
+        .aspectRatio(3.0 / 4.0, contentMode: .fit)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipped()
+    }
 
     private var reticle: some View {
         let ready = controller.reticleHasSurface
@@ -84,97 +122,73 @@ struct CaptureView: View {
         .allowsHitTesting(false)
     }
 
-    // MARK: 提示與讀值
-
-    private var hintBadge: some View {
-        let (text, color): (String, Color) = {
-            if !controller.reticleHasSurface && controller.measure.points.isEmpty {
-                return ("緩慢移動手機以偵測表面", .yellow)
-            }
-            switch controller.measure.points.count {
-            case 0:  return ("準星對準魚的吻端,按「＋」設定 A 點", .yellow)
-            case 1:  return ("移到尾叉,按「＋」設定 B 點", .yellow)
-            default: return ("量測完成,可拍攝;要重量按「重設」", .green)
-            }
-        }()
-        return Text(text)
-            .font(.footnote.bold())
-            .padding(.horizontal, 14).padding(.vertical, 7)
-            .background(color.opacity(0.88), in: Capsule())
-            .foregroundStyle(.black)
+    /// 貼在量測線中點的數字氣泡(拍照時同樣式合成進照片)
+    private func lengthBubble(cm: Double, final: Bool) -> some View {
+        Text(String(format: "%.1f cm", cm))
+            .font(.system(size: final ? 20 : 16,
+                          weight: .bold, design: .monospaced))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 12).padding(.vertical, 5)
+            .background(Color.black.opacity(0.65), in: Capsule())
+            .overlay(Capsule().strokeBorder(
+                final ? Color.green.opacity(0.8) : .white.opacity(0.3),
+                lineWidth: 1.5))
     }
 
-    private var lengthBadge: some View {
-        Group {
-            if let cm = controller.lengthCM {
-                Text(String(format: "%.1f cm", cm))
-                    .font(.system(size: 52, weight: .heavy, design: .rounded))
-                    .foregroundStyle(.white)
-                    .shadow(radius: 4)
-            } else if let cm = controller.previewLengthCM {
-                Text(String(format: "%.1f cm", cm))
-                    .font(.system(size: 36, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.75))
-                    .shadow(radius: 3)
-            }
-            if controller.lengthCM != nil, !controller.hasLiDAR {
-                Text("估計值(此機型無 LiDAR)")
-                    .font(.caption).foregroundStyle(.white.opacity(0.8))
-            }
-        }
-    }
+    // MARK: 下黑帶:復原 / 主按鈕 / 重設
 
-    // MARK: 操作列:復原 / ＋ / 快門 / 重設
-
-    private var controlBar: some View {
-        HStack(spacing: 26) {
+    private var bottomBar: some View {
+        HStack {
             circleButton(icon: "arrow.uturn.backward",
                          enabled: !controller.measure.points.isEmpty) {
                 controller.undo()
             }
-
-            addPointButton
-
-            shutterButton
-
+            Spacer()
+            mainButton
+            Spacer()
             circleButton(icon: "xmark",
                          enabled: !controller.measure.points.isEmpty) {
                 controller.reset()
             }
         }
-        .padding(.vertical, 8)
+        .padding(.horizontal, 44)
+        .padding(.vertical, 14)
+        .frame(maxWidth: .infinity)
     }
 
-    private var addPointButton: some View {
-        let enabled = controller.reticleHasSurface && controller.measure.canAddPoint
+    /// 唯一主按鈕:「＋」設點 → 兩點齊備變快門(白色實心圓)
+    private var mainButton: some View {
+        let action = CaptureControls.mainAction(mode: coordinator.flow.mode,
+                                                isComplete: controller.measure.isComplete)
+        let enabled = CaptureControls.isEnabled(action,
+                                                reticleHasSurface: controller.reticleHasSurface)
         return Button {
-            controller.addPoint()
+            switch action {
+            case .addPoint:
+                controller.addPoint()
+            case .shutter:
+                withAnimation(.easeOut(duration: 0.1)) { flash = true }
+                Task {
+                    try? await Task.sleep(for: .milliseconds(150))
+                    withAnimation(.easeOut(duration: 0.25)) { flash = false }
+                }
+                coordinator.takeShot(from: controller)
+            }
         } label: {
-            Image(systemName: "plus")
-                .font(.system(size: 26, weight: .bold))
-                .frame(width: 62, height: 62)
-                .background(enabled ? Color.white : .white.opacity(0.25),
-                            in: Circle())
-                .foregroundStyle(enabled ? .black : .white.opacity(0.5))
+            ZStack {
+                Circle()
+                    .strokeBorder(.white, lineWidth: 4)
+                    .frame(width: 76, height: 76)
+                if action == .shutter {
+                    Circle().fill(.white).frame(width: 60, height: 60)
+                } else {
+                    Image(systemName: "plus")
+                        .font(.system(size: 30, weight: .bold))
+                        .foregroundStyle(enabled ? .white : .white.opacity(0.35))
+                }
+            }
         }
         .disabled(!enabled)
-    }
-
-    private var shutterButton: some View {
-        let ready = controller.measure.isComplete || coordinator.flow.mode == .burst
-        return Button {
-            withAnimation(.easeOut(duration: 0.1)) { flash = true }
-            Task {
-                try? await Task.sleep(for: .milliseconds(150))
-                withAnimation(.easeOut(duration: 0.25)) { flash = false }
-            }
-            coordinator.takeShot(from: controller)
-        } label: {
-            Circle()
-                .strokeBorder(.white, lineWidth: 5)
-                .frame(width: 74, height: 74)
-                .background(Circle().fill(ready ? .white : .white.opacity(0.4)))
-        }
     }
 
     private func circleButton(icon: String, enabled: Bool,
@@ -183,48 +197,35 @@ struct CaptureView: View {
             Image(systemName: icon)
                 .font(.system(size: 17, weight: .semibold))
                 .frame(width: 46, height: 46)
-                .background(Color.black.opacity(0.55), in: Circle())
-                .foregroundStyle(enabled ? .white : .white.opacity(0.3))
+                .background(Color.white.opacity(0.12), in: Circle())
+                .foregroundStyle(enabled ? .white : .white.opacity(0.25))
         }
         .disabled(!enabled)
     }
 
-    // MARK: 底列
-
-    private var burstBar: some View {
-        HStack(spacing: 10) {
-            Text("已拍 \(coordinator.flow.pendingShots) 張 · 稍後量測")
-                .font(.footnote.bold())
-                .padding(.horizontal, 14).padding(.vertical, 7)
-                .background(Color.orange.opacity(0.92), in: Capsule())
-                .foregroundStyle(.black)
-            Button("結束連拍") { coordinator.endBurst() }
-                .font(.footnote)
-                .padding(.horizontal, 14).padding(.vertical, 7)
-                .background(Color.black.opacity(0.7), in: Capsule())
-                .overlay(Capsule().strokeBorder(.white.opacity(0.4), lineWidth: 1.5))
-                .foregroundStyle(.white)
-        }
-    }
+    // MARK: 上黑帶小元件
 
     private var modeToggle: some View {
-        ChipButton(label: coordinator.flow.mode == .burst ? "連拍中" : "連拍",
-                   isSelected: coordinator.flow.mode == .burst,
-                   accent: .orange) {
-            coordinator.setMode(coordinator.flow.mode == .burst ? .single : .burst)
-        }
+        Button("連拍") { coordinator.setMode(.burst) }
+            .font(.caption)
+            .padding(.horizontal, 12).padding(.vertical, 6)
+            .background(Color.white.opacity(0.12), in: Capsule())
+            .foregroundStyle(.white.opacity(0.85))
     }
 
-    private var gpsBadge: some View {
-        HStack(spacing: 6) {
-            Circle().fill(gpsLabel == nil ? .yellow : .green)
-                .frame(width: 8, height: 8)
-            Text(gpsLabel ?? "定位中…")
-                .font(.caption.monospaced())
+    private var burstBadge: some View {
+        HStack(spacing: 8) {
+            Text("已拍 \(coordinator.flow.pendingShots) 張")
+                .font(.caption.bold())
+                .padding(.horizontal, 12).padding(.vertical, 6)
+                .background(Color.orange.opacity(0.9), in: Capsule())
+                .foregroundStyle(.black)
+            Button("結束連拍") { coordinator.endBurst() }
+                .font(.caption)
+                .padding(.horizontal, 12).padding(.vertical, 6)
+                .background(Color.white.opacity(0.12), in: Capsule())
+                .foregroundStyle(.white)
         }
-        .padding(.horizontal, 12).padding(.vertical, 6)
-        .background(Color.black.opacity(0.6), in: Capsule())
-        .foregroundStyle(.white.opacity(0.85))
     }
 
     private var recordCountButton: some View {
@@ -234,9 +235,8 @@ struct CaptureView: View {
             Text("紀錄 \(records.count)")
                 .font(.caption)
                 .padding(.horizontal, 12).padding(.vertical, 6)
-                .background(Color.black.opacity(0.6), in: Capsule())
+                .background(Color.white.opacity(0.12), in: Capsule())
                 .foregroundStyle(.white.opacity(0.85))
         }
     }
 }
-
