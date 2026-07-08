@@ -30,14 +30,33 @@ struct CaptureView: View {
     @Query private var records: [CatchRecord]
 
     var body: some View {
-        VStack(spacing: 0) {
-            topBar
-            preview
-            bottomBar
+        // 尺寸一律明確計算:aspectRatio 對 UIViewRepresentable 會採用
+        // ARView 的 intrinsic 尺寸,導致預覽縮成一小塊(實機截圖確認過),
+        // 這裡直接用 GeometryReader 指定預覽框大小。
+        GeometryReader { geo in
+            VStack(spacing: 0) {
+                topBar
+                preview
+                    .frame(width: geo.size.width,
+                           height: previewHeight(in: geo.size))
+                    .clipped()
+                bottomBar
+                    .frame(maxHeight: .infinity)
+            }
+            .frame(width: geo.size.width, height: geo.size.height,
+                   alignment: .top)
         }
         .background(Color.black.ignoresSafeArea())
         .onAppear { coordinator.locationService.requestAuthorization() }
         .onDisappear { controller.pause() }
+    }
+
+    /// 預覽高度:盡量吃滿寬度下的 4:3(相機原生比例),
+    /// 但保留上下控制帶最小空間;剩餘黑帶自然落在上下兩端。
+    private func previewHeight(in size: CGSize) -> CGFloat {
+        let reservedForBars: CGFloat = 200
+        return min(size.width * 4.0 / 3.0,
+                   max(size.height - reservedForBars, 240))
     }
 
     // MARK: 上黑帶:狀態列 + 提示
@@ -100,9 +119,6 @@ struct CaptureView: View {
                 Color.white.allowsHitTesting(false)
             }
         }
-        .aspectRatio(3.0 / 4.0, contentMode: .fit)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .clipped()
     }
 
     private var reticle: some View {
