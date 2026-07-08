@@ -27,6 +27,21 @@ final class MeasureFlowTests: XCTestCase {
         XCTAssertEqual(flow.pendingShots, 0)
     }
 
+    func testShutterWithCompletedMeasurementGoesStraightToForm() {
+        // 測距儀式兩點已設定 → 照片已含線段與長度,直達表單
+        var flow = MeasureFlow()
+        flow.shutterPressed(measurementReady: true)
+        XCTAssertEqual(flow.screen, .form)
+    }
+
+    func testBurstShutterIgnoresMeasurementReady() {
+        var flow = MeasureFlow()
+        flow.setMode(.burst)
+        flow.shutterPressed(measurementReady: true)
+        XCTAssertEqual(flow.screen, .capture)
+        XCTAssertEqual(flow.pendingShots, 1)
+    }
+
     func testShutterInBurstModeAccumulatesPendingAndStaysOnCapture() {
         var flow = MeasureFlow()
         flow.setMode(.burst)
