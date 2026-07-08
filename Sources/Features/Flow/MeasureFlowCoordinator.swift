@@ -36,11 +36,13 @@ final class MeasureFlowCoordinator: ObservableObject {
         var scaleA: PlanePoint
         var scaleB: PlanePoint
         let measureMethod: String
+        /// 照片是否已含量測線與長度標籤(測距儀路徑拍照時即合成)
+        let labelComposited: Bool
 
         init(image: UIImage, capturedAt: Date,
              location: CLLocation?, placeName: String?,
              arLengthCM: Double?, arEndpoints: (PlanePoint, PlanePoint)?,
-             measureMethod: String) {
+             measureMethod: String, labelComposited: Bool = false) {
             let w = image.size.width, h = image.size.height
             self.image = image
             self.capturedAt = capturedAt
@@ -54,6 +56,7 @@ final class MeasureFlowCoordinator: ObservableObject {
             self.scaleA = PlanePoint(x: w * 0.35, y: h * 0.75)
             self.scaleB = PlanePoint(x: w * 0.65, y: h * 0.75)
             self.measureMethod = measureMethod
+            self.labelComposited = labelComposited
         }
     }
 
@@ -90,17 +93,17 @@ final class MeasureFlowCoordinator: ObservableObject {
         currentShot?.arLengthCM != nil && currentShot?.originalFishA != nil
     }
 
-    // MARK: 拍照
+    // MARK: 拍照(測距儀式:快照已含 3D 點與線段,再合成長度標籤)
 
-    func takeShot(from controller: MeasureSessionController) {
+    func takeShot(from controller: TapMeasureSessionController) {
         guard let arView = controller.arView else { return }
-        let arLength = controller.lengthCM
-        let endpointsInView = controller.endpointsInView
-        let method = controller.hasLiDAR ? "auto-lidar" : "auto-plane"
+        let lengthCM = controller.lengthCM
+        let endpointsInView = controller.projectedEndpoints()
+        let method = controller.hasLiDAR ? "tap-lidar" : "tap-plane"
         let viewSize = arView.bounds.size
 
         Task { @MainActor in
-            guard let image = try? await captureService.snapshot(from: arView) else {
+            guard let raw = try? await captureService.snapshot(from: arView) else {
                 showToast("拍攝失敗,請再試一次")
                 return
             }
@@ -109,24 +112,37 @@ final class MeasureFlowCoordinator: ObservableObject {
 
             switch flow.mode {
             case .burst:
-                pendingQueue.append(PendingShot(image: image, capturedAt: .now,
+                // 連拍只存原始照片入佇列,稍後批次量測
+                pendingQueue.append(PendingShot(image: raw, capturedAt: .now,
                                                 location: location, placeName: place))
                 flow.shutterPressed()
+                controller.reset()   // 快照完成後才清點位,準備下一張
             case .single:
-                // AR 端點(view 座標)→ 快照影像像素座標
-                var arEndpoints: (PlanePoint, PlanePoint)? = nil
-                if let (v1, v2) = endpointsInView, arLength != nil,
+                var image = raw
+                var endpointsPx: (PlanePoint, PlanePoint)? = nil
+                if let lengthCM, let (v1, v2) = endpointsInView,
                    viewSize.width > 0, viewSize.height > 0 {
                     let sx = image.size.width / viewSize.width
                     let sy = image.size.height / viewSize.height
-                    arEndpoints = (PlanePoint(x: v1.x * sx, y: v1.y * sy),
-                                   PlanePoint(x: v2.x * sx, y: v2.y * sy))
+                    let p1 = PlanePoint(x: v1.x * sx, y: v1.y * sy)
+                    let p2 = PlanePoint(x: v2.x * sx, y: v2.y * sy)
+                    endpointsPx = (p1, p2)
+                    let labelPos = MeasureAnnotationLayout.labelPosition(
+                        p1: p1, p2: p2,
+                        offset: image.size.width * 0.06,
+                        width: image.size.width, height: image.size.height)
+                    image = ImageAnnotator.drawLengthLabel(
+                        String(format: "%.1f cm", lengthCM),
+                        at: CGPoint(x: labelPos.x, y: labelPos.y),
+                        on: raw)
                 }
                 currentShot = Shot(image: image, capturedAt: .now,
                                    location: location, placeName: place,
-                                   arLengthCM: arLength, arEndpoints: arEndpoints,
-                                   measureMethod: method)
-                flow.shutterPressed()
+                                   arLengthCM: lengthCM, arEndpoints: endpointsPx,
+                                   measureMethod: method,
+                                   labelComposited: lengthCM != nil)
+                // 兩點已設定 → 照片已含線段與長度,直達表單
+                flow.shutterPressed(measurementReady: lengthCM != nil)
             }
         }
     }
@@ -178,9 +194,24 @@ final class MeasureFlowCoordinator: ObservableObject {
         let usedReference = !hasMetricLength && selectedReference.lengthCM != nil
             ? [selectedReference.id] : []
 
+        // 量魚/比例尺路徑:照片還沒有線段,存檔前把線+端點+標籤合成進去
+        var imageToSave = shot.image
+        if !shot.labelComposited, let length {
+            let size = shot.image.size
+            let labelPos = MeasureAnnotationLayout.labelPosition(
+                p1: shot.fishA, p2: shot.fishB,
+                offset: Double(size.width) * 0.06,
+                width: Double(size.width), height: Double(size.height))
+            imageToSave = ImageAnnotator.drawMeasurement(
+                from: CGPoint(x: shot.fishA.x, y: shot.fishA.y),
+                to: CGPoint(x: shot.fishB.x, y: shot.fishB.y),
+                label: String(format: "%.1f cm", length),
+                labelAt: CGPoint(x: labelPos.x, y: labelPos.y),
+                on: shot.image)
+        }
+
         do {
-            let localID = try await captureService.save(image: shot.image,
-                                                        lengthCM: length,
+            let localID = try await captureService.save(image: imageToSave,
                                                         location: shot.location,
                                                         placeName: shot.placeName)
             let record = CatchRecord(

@@ -62,24 +62,6 @@ struct ChipButton: View {
     }
 }
 
-/// 三分法構圖格線
-struct GridOverlay: View {
-    var body: some View {
-        Canvas { context, size in
-            var path = Path()
-            for f in [1.0 / 3.0, 2.0 / 3.0] {
-                path.move(to: CGPoint(x: size.width * f, y: 0))
-                path.addLine(to: CGPoint(x: size.width * f, y: size.height))
-                path.move(to: CGPoint(x: 0, y: size.height * f))
-                path.addLine(to: CGPoint(x: size.width, y: size.height * f))
-            }
-            context.stroke(path, with: .color(.white.opacity(0.35)), lineWidth: 1)
-        }
-        .allowsHitTesting(false)
-        .ignoresSafeArea()
-    }
-}
-
 /// 顯示影像於容器內(scaledToFit)時的實際繪製區域,
 /// 供「影像像素座標 ↔ view 座標」互換。
 enum ImageFitGeometry {

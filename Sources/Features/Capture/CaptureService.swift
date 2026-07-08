@@ -25,15 +25,15 @@ final class CaptureService {
         }
     }
 
-    /// 浮水印 + EXIF + 相簿。回傳 PHAsset localIdentifier。
+    /// 浮水印(日期/地點;長度標籤由 ImageAnnotator 於量測位置合成)
+    /// + EXIF + 相簿。回傳 PHAsset localIdentifier。
     func save(image: UIImage,
-              lengthCM: Double?,
               location: CLLocation?,
               placeName: String?) async throws -> String {
 
         let settings = AppSettings()
         let final = settings.watermarkEnabled
-            ? addWatermark(to: image, lengthCM: lengthCM,
+            ? addWatermark(to: image,
                            placeName: settings.watermarkShowsPlace ? placeName : nil)
             : image
 
@@ -49,7 +49,7 @@ final class CaptureService {
 
     // MARK: 浮水印
 
-    private func addWatermark(to image: UIImage, lengthCM: Double?, placeName: String?) -> UIImage {
+    private func addWatermark(to image: UIImage, placeName: String?) -> UIImage {
         let renderer = UIGraphicsImageRenderer(size: image.size)
         return renderer.image { ctx in
             image.draw(at: .zero)
@@ -57,9 +57,7 @@ final class CaptureService {
             let dateStr = DateFormatter.localizedString(from: .now,
                                                         dateStyle: .medium,
                                                         timeStyle: .short)
-            var lines = [String]()
-            if let lengthCM { lines.append(String(format: "%.1f cm", lengthCM)) }
-            lines.append(dateStr)
+            var lines = [dateStr]
             if let placeName { lines.append(placeName) }
 
             let fontSize = image.size.width * 0.035
