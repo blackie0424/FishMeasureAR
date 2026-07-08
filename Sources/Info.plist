@@ -26,6 +26,8 @@
 	<string>記錄漁獲的釣點位置。可在設定中啟用釣點隱私模式,或拒絕授權仍可使用測量功能。</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>將測量完成的漁獲照片儲存到你的相簿。</string>
+	<key>UILaunchScreen</key>
+	<dict/>
 	<key>UIRequiredDeviceCapabilities</key>
 	<array>
 		<string>arkit</string>

@@ -7,12 +7,12 @@ struct MeasureFlowScreen: View {
 
     var body: some View {
         // NavigationStack 只為了 toolbar 可見性控制:
-        // 拍攝畫面隱藏 Tab bar(沉浸式全螢幕,操作列不再被分頁列蓋住),
-        // 其餘畫面(表單/統計/補量)恢復顯示。
+        // 量測流程(拍攝→量魚→比例尺→表單)全程沉浸式隱藏 Tab bar,
+        // 只有統計頁(瀏覽性質)顯示分頁列。
         NavigationStack {
             content
                 .toolbar(.hidden, for: .navigationBar)
-                .toolbar(coordinator.flow.screen == .capture ? .hidden : .visible,
+                .toolbar(coordinator.flow.screen == .stats ? .visible : .hidden,
                          for: .tabBar)
         }
     }
