@@ -31,11 +31,14 @@ public struct MeasureFlow: Equatable, Sendable {
         mode = newMode
     }
 
-    public mutating func shutterPressed() {
+    /// - Parameter measurementReady: 快門當下量測已完成(測距儀式兩點已設定,
+    ///   照片已合成線段與長度)→ 單拍直達表單;否則進量魚畫面手動補量。
+    ///   連拍一律只入佇列。
+    public mutating func shutterPressed(measurementReady: Bool = false) {
         switch mode {
         case .single:
             isMeasuringPending = false
-            screen = .adjustFish
+            screen = measurementReady ? .form : .adjustFish
         case .burst:
             pendingShots += 1
         }
