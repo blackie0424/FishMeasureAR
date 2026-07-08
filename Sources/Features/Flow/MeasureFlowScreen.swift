@@ -6,6 +6,18 @@ struct MeasureFlowScreen: View {
     @StateObject private var coordinator = MeasureFlowCoordinator()
 
     var body: some View {
+        // NavigationStack 只為了 toolbar 可見性控制:
+        // 拍攝畫面隱藏 Tab bar(沉浸式全螢幕,操作列不再被分頁列蓋住),
+        // 其餘畫面(表單/統計/補量)恢復顯示。
+        NavigationStack {
+            content
+                .toolbar(.hidden, for: .navigationBar)
+                .toolbar(coordinator.flow.screen == .capture ? .hidden : .visible,
+                         for: .tabBar)
+        }
+    }
+
+    private var content: some View {
         ZStack {
             switch coordinator.flow.screen {
             case .capture:

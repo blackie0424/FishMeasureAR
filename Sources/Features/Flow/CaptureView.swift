@@ -29,19 +29,23 @@ struct CaptureView: View {
     @State private var flash = false
     @Query private var records: [CatchRecord]
 
+    /// 上黑帶固定高度(模式列 + 提示各一行)
+    private let topBarHeight: CGFloat = 92
+
     var body: some View {
-        // 尺寸一律明確計算:aspectRatio 對 UIViewRepresentable 會採用
-        // ARView 的 intrinsic 尺寸,導致預覽縮成一小塊(實機截圖確認過),
-        // 這裡直接用 GeometryReader 指定預覽框大小。
+        // 三段版面全部明確計算(拍攝畫面已隱藏 Tab bar,全螢幕可用):
+        // 上黑帶(固定) + 預覽(寬度撐滿的 4:3,上限 2/3 高) + 下黑帶(吃剩餘)。
+        // 不用 aspectRatio/彈性推導——UIViewRepresentable 的 intrinsic
+        // 尺寸會讓 SwiftUI 算出不可預期的結果(實機驗證過)。
         GeometryReader { geo in
+            let previewH = min(geo.size.width * 4.0 / 3.0,
+                               geo.size.height * 0.66)
             VStack(spacing: 0) {
                 topBar
-                preview
-                    .frame(width: geo.size.width,
-                           height: previewHeight(in: geo.size))
-                    .clipped()
+                    .frame(width: geo.size.width, height: topBarHeight)
+                preview(width: geo.size.width, height: previewH)
                 bottomBar
-                    .frame(maxHeight: .infinity)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .frame(width: geo.size.width, height: geo.size.height,
                    alignment: .top)
@@ -49,14 +53,6 @@ struct CaptureView: View {
         .background(Color.black.ignoresSafeArea())
         .onAppear { coordinator.locationService.requestAuthorization() }
         .onDisappear { controller.pause() }
-    }
-
-    /// 預覽高度:盡量吃滿寬度下的 4:3(相機原生比例),
-    /// 但保留上下控制帶最小空間;剩餘黑帶自然落在上下兩端。
-    private func previewHeight(in size: CGSize) -> CGFloat {
-        let reservedForBars: CGFloat = 200
-        return min(size.width * 4.0 / 3.0,
-                   max(size.height - reservedForBars, 240))
     }
 
     // MARK: 上黑帶:狀態列 + 提示
@@ -100,9 +96,9 @@ struct CaptureView: View {
         controller.measure.isComplete ? .green : .yellow
     }
 
-    // MARK: 中間:相機預覽(3:4)
+    // MARK: 中間:相機預覽
 
-    private var preview: some View {
+    private func preview(width: CGFloat, height: CGFloat) -> some View {
         ZStack {
             ARViewContainer(controller: controller)
 
@@ -110,8 +106,10 @@ struct CaptureView: View {
 
             if let mid = controller.lineMidpointInView,
                let cm = controller.lengthCM ?? controller.previewLengthCM {
+                // 氣泡位置夾在預覽範圍內,貼邊不被裁切
                 lengthBubble(cm: cm, final: controller.measure.isComplete)
-                    .position(mid)
+                    .position(x: min(max(mid.x, 64), width - 64),
+                              y: min(max(mid.y, 26), height - 26))
                     .allowsHitTesting(false)
             }
 
@@ -119,6 +117,8 @@ struct CaptureView: View {
                 Color.white.allowsHitTesting(false)
             }
         }
+        .frame(width: width, height: height)
+        .clipped()
     }
 
     private var reticle: some View {
