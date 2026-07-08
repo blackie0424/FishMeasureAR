@@ -14,6 +14,8 @@ final class TapMeasureSessionController: NSObject, ObservableObject, ARSessionDe
     @Published private(set) var reticleHasSurface = false
     /// 設定第一點後,A 點到準星的即時預覽長度(cm)
     @Published private(set) var previewLengthCM: Double?
+    /// 量測線中點的畫面座標(數字氣泡直接貼在線上顯示用)
+    @Published private(set) var lineMidpointInView: CGPoint?
     @Published private(set) var hasLiDAR = false
 
     weak var arView: ARView?
@@ -49,7 +51,7 @@ final class TapMeasureSessionController: NSObject, ObservableObject, ARSessionDe
         Task { @MainActor in self.tick() }
     }
 
-    /// 每 3 幀更新準星狀態與預覽線(~20Hz 已足夠順暢)
+    /// 每 3 幀更新準星狀態、預覽線與數字氣泡位置(~20Hz 已足夠順暢)
     private func tick() {
         frameCounter += 1
         guard frameCounter % 3 == 0 else { return }
@@ -57,13 +59,33 @@ final class TapMeasureSessionController: NSObject, ObservableObject, ARSessionDe
         let hit = centerWorldPoint()
         reticleHasSurface = hit != nil
 
-        if worldPoints.count == 1 {
-            if let hit {
+        switch worldPoints.count {
+        case 1:
+            if let hit, let arView {
                 updatePreviewLine(from: worldPoints[0], to: hit)
                 previewLengthCM = Double(simd_distance(worldPoints[0], hit)) * 100
+                if let a = arView.project(worldPoints[0]) {
+                    let center = CGPoint(x: arView.bounds.midX, y: arView.bounds.midY)
+                    lineMidpointInView = CGPoint(x: (a.x + center.x) / 2,
+                                                 y: (a.y + center.y) / 2)
+                } else {
+                    lineMidpointInView = nil
+                }
             } else {
                 previewLengthCM = nil
+                lineMidpointInView = nil
             }
+        case 2:
+            if let arView,
+               let a = arView.project(worldPoints[0]),
+               let b = arView.project(worldPoints[1]) {
+                lineMidpointInView = CGPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2)
+            } else {
+                lineMidpointInView = nil
+            }
+        default:
+            previewLengthCM = nil
+            lineMidpointInView = nil
         }
     }
 
@@ -108,6 +130,7 @@ final class TapMeasureSessionController: NSObject, ObservableObject, ARSessionDe
         removeLine()
         removePreview()
         previewLengthCM = nil
+        lineMidpointInView = nil
     }
 
     /// 兩端點投影回目前畫面座標(拍照時定位長度標籤用)
