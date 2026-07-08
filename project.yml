@@ -25,6 +25,9 @@ targets:
     info:
       path: Sources/Info.plist
       properties:
+        # 沒有 UILaunchScreen 宣告時,iOS 會把 App 視為 legacy 而上下 letterbox
+        # (實機黑帶的根因);空 dict 即代表支援全螢幕
+        UILaunchScreen: {}
         UIRequiredDeviceCapabilities: [arkit]
         NSCameraUsageDescription: 需要相機進行 AR 魚長測量與拍攝。
         NSLocationWhenInUseUsageDescription: 記錄漁獲的釣點位置。可在設定中啟用釣點隱私模式,或拒絕授權仍可使用測量功能。
