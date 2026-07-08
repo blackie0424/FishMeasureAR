@@ -1,0 +1,8 @@
+# XcodeGen 產生物:一律由 `xcodegen generate` 重新生成,不入版控
+FishMeasureAR.xcodeproj/
+
+# Xcode / SwiftPM 使用者狀態
+FishMeasureKit/.swiftpm/
+xcuserdata/
+.DS_Store
+.build/
