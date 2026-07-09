@@ -29,6 +29,22 @@ struct FormView: View {
             }
         }
         .background(Color(red: 0.055, green: 0.094, blue: 0.133).ignoresSafeArea())
+        .overlay {
+            if coordinator.isSaving {
+                ZStack {
+                    Color.black.opacity(0.55).ignoresSafeArea()
+                    VStack(spacing: 12) {
+                        ProgressView().controlSize(.large).tint(.white)
+                        Text("儲存中…")
+                            .font(.footnote.bold()).foregroundStyle(.white)
+                    }
+                    .padding(28)
+                    .background(Color.black.opacity(0.75),
+                                in: RoundedRectangle(cornerRadius: 16))
+                }
+            }
+        }
+        .disabled(coordinator.isSaving)
     }
 
     // MARK: 照片(所見即所得,量測線與長度已在照片上)

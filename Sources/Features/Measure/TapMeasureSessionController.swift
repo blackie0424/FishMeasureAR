@@ -2,6 +2,7 @@ import ARKit
 import RealityKit
 import SwiftUI
 import FishMeasureKit
+import os
 
 /// 仿 iOS 測距儀的 AR 兩點量測:
 /// 準星(畫面中心)raycast 到表面,按「＋」設定 A、B 點(世界座標錨定,
@@ -25,13 +26,17 @@ final class TapMeasureSessionController: NSObject, ObservableObject, ARSessionDe
     private var lineAnchor: AnchorEntity?
     private var previewAnchor: AnchorEntity?
     private var previewLine: ModelEntity?
-    private var frameCounter = 0
+    /// 幀節流:在 delegate 執行緒先過濾,避免每幀都往 MainActor 丟 Task
+    private let frameGate = OSAllocatedUnfairLock(initialState: 0)
+    private let logger = Logger(subsystem: "com.blackie.FishMeasureAR",
+                                category: "ar")
 
     var lengthCM: Double? { measure.lengthCM }
 
     // MARK: Session
 
     func start(on arView: ARView) {
+        logger.info("ARSession start (LiDAR pending check)")
         self.arView = arView
         let config = ARWorldTrackingConfiguration()
         config.planeDetection = [.horizontal, .vertical]
@@ -41,21 +46,26 @@ final class TapMeasureSessionController: NSObject, ObservableObject, ARSessionDe
         }
         arView.session.delegate = self
         arView.session.run(config, options: [.resetTracking, .removeExistingAnchors])
+        logger.info("ARSession running (LiDAR=\(self.hasLiDAR))")
     }
 
     func pause() {
+        logger.info("ARSession pause")
         arView?.session.pause()
     }
 
     nonisolated func session(_ session: ARSession, didUpdate frame: ARFrame) {
+        // 每 3 幀更新一次(~20Hz)就足夠順暢
+        let n = frameGate.withLock { count -> Int in
+            count += 1
+            return count
+        }
+        guard n % 3 == 0 else { return }
         Task { @MainActor in self.tick() }
     }
 
-    /// 每 3 幀更新準星狀態、預覽線與數字氣泡位置(~20Hz 已足夠順暢)
+    /// 更新準星狀態、預覽線與數字氣泡位置
     private func tick() {
-        frameCounter += 1
-        guard frameCounter % 3 == 0 else { return }
-
         let hit = centerWorldPoint()
         reticleHasSurface = hit != nil
 
