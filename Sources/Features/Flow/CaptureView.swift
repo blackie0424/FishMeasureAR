@@ -9,10 +9,7 @@ struct ARViewContainer: UIViewRepresentable {
     let controller: TapMeasureSessionController
 
     func makeUIView(context: Context) -> ARView {
-        let arView = ARView(frame: .zero)
-        arView.renderOptions.insert(.disableMotionBlur)
-        controller.start(on: arView)
-        return arView
+        controller.makeOrReuseARView()
     }
 
     func updateUIView(_ uiView: ARView, context: Context) {}
@@ -25,9 +22,14 @@ struct ARViewContainer: UIViewRepresentable {
 
 struct CaptureView: View {
     @ObservedObject var coordinator: MeasureFlowCoordinator
-    @StateObject private var controller = TapMeasureSessionController()
+    @ObservedObject private var controller: TapMeasureSessionController
     @State private var flash = false
     @Query private var records: [CatchRecord]
+
+    init(coordinator: MeasureFlowCoordinator) {
+        self._coordinator = ObservedObject(wrappedValue: coordinator)
+        self._controller = ObservedObject(wrappedValue: coordinator.tapController)
+    }
 
     /// 上黑帶固定高度(模式列 + 提示各一行)
     private let topBarHeight: CGFloat = 92

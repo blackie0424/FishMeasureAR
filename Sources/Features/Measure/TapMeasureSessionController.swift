@@ -19,7 +19,9 @@ final class TapMeasureSessionController: NSObject, ObservableObject, ARSessionDe
     @Published private(set) var lineMidpointInView: CGPoint?
     @Published private(set) var hasLiDAR = false
 
-    weak var arView: ARView?
+    /// 強持有並跨畫面重用:回到拍攝畫面時不重置世界地圖,
+    /// 免去每拍一張就重新等待平面偵測(「等準星變綠很久」的主因之一)。
+    private(set) var arView: ARView?
 
     private var worldPoints: [SIMD3<Float>] = []
     private var pointAnchors: [AnchorEntity] = []
@@ -35,18 +37,35 @@ final class TapMeasureSessionController: NSObject, ObservableObject, ARSessionDe
 
     // MARK: Session
 
-    func start(on arView: ARView) {
-        logger.info("ARSession start (LiDAR pending check)")
-        self.arView = arView
+    /// 首次建立 ARView 並全新啟動;之後重用同一個 view、
+    /// 以不帶 reset 的 run 快速回復(保留世界地圖,約一秒內重定位)。
+    func makeOrReuseARView() -> ARView {
+        if let arView {
+            logger.info("ARSession resume (reuse, no reset)")
+            arView.session.run(configuration())
+            return arView
+        }
+        let view = ARView(frame: .zero)
+        view.renderOptions.insert(.disableMotionBlur)
+        arView = view
+        view.session.delegate = self
+        view.session.run(configuration(),
+                         options: [.resetTracking, .removeExistingAnchors])
+        logger.info("ARSession started fresh (LiDAR=\(self.hasLiDAR))")
+        return view
+    }
+
+    private func configuration() -> ARWorldTrackingConfiguration {
         let config = ARWorldTrackingConfiguration()
         config.planeDetection = [.horizontal, .vertical]
         if ARWorldTrackingConfiguration.supportsFrameSemantics(.sceneDepth) {
             config.frameSemantics.insert(.sceneDepth)
             hasLiDAR = true
         }
-        arView.session.delegate = self
-        arView.session.run(config, options: [.resetTracking, .removeExistingAnchors])
-        logger.info("ARSession running (LiDAR=\(self.hasLiDAR))")
+        if ARWorldTrackingConfiguration.supportsFrameSemantics(.smoothedSceneDepth) {
+            config.frameSemantics.insert(.smoothedSceneDepth)
+        }
+        return config
     }
 
     func pause() {
@@ -151,16 +170,44 @@ final class TapMeasureSessionController: NSObject, ObservableObject, ARSessionDe
         return (a, b)
     }
 
-    // MARK: 準星 raycast
+    // MARK: 準星取點(三段後備,讓「變綠」幾乎即時)
 
     private func centerWorldPoint() -> SIMD3<Float>? {
         guard let arView, arView.bounds.size != .zero else { return nil }
         let center = CGPoint(x: arView.bounds.midX, y: arView.bounds.midY)
-        guard let result = arView.raycast(from: center,
-                                          allowing: .estimatedPlane,
-                                          alignment: .any).first else { return nil }
-        let t = result.worldTransform.columns.3
-        return SIMD3(t.x, t.y, t.z)
+
+        // 1) 平面 raycast:平面已知時最穩定
+        if let result = arView.raycast(from: center,
+                                       allowing: .estimatedPlane,
+                                       alignment: .any).first {
+            let t = result.worldTransform.columns.3
+            return SIMD3(t.x, t.y, t.z)
+        }
+        // 2) LiDAR 深度直接反投影:即開即用,不必等平面偵測,
+        //    對貼在魚體(濕滑/低特徵)上的點也更準
+        if let world = depthCenterWorldPoint() {
+            return world
+        }
+        // 3) 特徵點(非 LiDAR 的最後手段;API 已棄用但仍可用)
+        if let hit = arView.hitTest(center, types: .featurePoint).first {
+            let t = hit.worldTransform.columns.3
+            return SIMD3(t.x, t.y, t.z)
+        }
+        return nil
+    }
+
+    /// view 中心 → 逆 displayTransform → capturedImage 像素 → LiDAR 深度反投影
+    private func depthCenterWorldPoint() -> SIMD3<Float>? {
+        guard hasLiDAR, let arView,
+              let frame = arView.session.currentFrame else { return nil }
+        let viewSize = arView.bounds.size
+        let imageW = CGFloat(CVPixelBufferGetWidth(frame.capturedImage))
+        let imageH = CGFloat(CVPixelBufferGetHeight(frame.capturedImage))
+        let inverse = frame.displayTransform(for: .portrait,
+                                             viewportSize: viewSize).inverted()
+        let norm = CGPoint(x: 0.5, y: 0.5).applying(inverse)
+        let pixel = CGPoint(x: norm.x * imageW, y: norm.y * imageH)
+        return DepthUnprojector.unproject(pixel: pixel, frame: frame)
     }
 
     // MARK: 3D 實體
