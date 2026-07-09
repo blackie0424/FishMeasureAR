@@ -1,13 +1,18 @@
 @preconcurrency import CoreLocation
+import os
 
 /// 定位服務:授權、單次定位、反向地理編碼。
 /// 拒絕授權時所有方法回傳 nil,測量功能不受影響。
 /// 綁定 MainActor:CLLocationManager 及其 delegate 皆在主執行緒運作,
-/// 也讓內部可變狀態(continuation)符合並行安全規範。
+/// 也讓內部可變狀態(continuations)符合並行安全規範。
 @MainActor
 final class LocationService: NSObject, CLLocationManagerDelegate {
     private let manager = CLLocationManager()
-    private var continuation: CheckedContinuation<CLLocation?, Never>?
+    /// 支援多個併發呼叫者:全部排隊,一次定位結果同時回覆。
+    /// (先前單一 continuation 版本在重疊呼叫時會覆寫,第一個 await 永遠卡住)
+    private var continuations: [CheckedContinuation<CLLocation?, Never>] = []
+    private let logger = Logger(subsystem: "com.blackie.FishMeasureAR",
+                                category: "location")
 
     override init() {
         super.init()
@@ -21,28 +26,33 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
         }
     }
 
-    /// 單次定位,10 秒逾時
+    /// 單次定位,10 秒逾時;併發呼叫共享同一次結果。
     func currentLocation() async -> CLLocation? {
         guard manager.authorizationStatus == .authorizedWhenInUse ||
               manager.authorizationStatus == .authorizedAlways else { return nil }
 
+        logger.info("currentLocation requested (waiters=\(self.continuations.count))")
         return await withCheckedContinuation { cont in
-            self.continuation = cont
-            manager.requestLocation()
+            continuations.append(cont)
+            if continuations.count == 1 {
+                manager.requestLocation()
+            }
             // 10 秒逾時:asyncAfter 於主佇列執行,故可安全 assumeIsolated 回到 MainActor
             DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
                 MainActor.assumeIsolated {
-                    guard let self else { return }
+                    guard let self, !self.continuations.isEmpty else { return }
+                    self.logger.warning("currentLocation timeout, using last known")
                     self.finish(with: self.manager.location)
                 }
             }
         }
     }
 
-    /// 統一收斂 continuation,確保只 resume 一次
+    /// 統一收斂:回覆所有等待者,確保每個 continuation 只 resume 一次
     private func finish(with location: CLLocation?) {
-        continuation?.resume(returning: location)
-        continuation = nil
+        let waiters = continuations
+        continuations.removeAll()
+        waiters.forEach { $0.resume(returning: location) }
     }
 
     /// 反向地理編碼(離線時回傳 nil,之後可由日誌補查)
@@ -66,6 +76,7 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
     }
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        logger.warning("didFailWithError: \(error.localizedDescription)")
         finish(with: nil)
     }
 }

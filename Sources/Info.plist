@@ -27,7 +27,10 @@
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>將測量完成的漁獲照片儲存到你的相簿。</string>
 	<key>UILaunchScreen</key>
-	<dict/>
+	<dict>
+		<key>UIColorName</key>
+		<string>LaunchBackground</string>
+	</dict>
 	<key>UIRequiredDeviceCapabilities</key>
 	<array>
 		<string>arkit</string>

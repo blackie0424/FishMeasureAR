@@ -2,6 +2,7 @@ import SwiftUI
 import SwiftData
 import CoreLocation
 import FishMeasureKit
+import os
 
 /// 工作流協調者:持有 MeasureFlow 狀態機(FishMeasureKit,純邏輯)、
 /// 當前量測中的照片、連拍待量佇列,並負責儲存(照片+SwiftData)。
@@ -15,10 +16,14 @@ final class MeasureFlowCoordinator: ObservableObject {
     @Published private(set) var pendingQueue: [PendingShot] = []
     @Published private(set) var toast: String?
     @Published var selectedReference: ScaleReference = ScaleReference.catalog[0]
+    /// 儲存進行中(表單顯示旋轉指示、鎖定按鈕防重複點擊)
+    @Published private(set) var isSaving = false
 
     let locationService = LocationService()
     private let captureService = CaptureService()
     private var toastTask: Task<Void, Never>?
+    private let logger = Logger(subsystem: "com.blackie.FishMeasureAR",
+                                category: "flow")
 
     /// 量測中的一張照片。座標一律為影像像素座標(原點左上)。
     struct Shot {
@@ -181,11 +186,15 @@ final class MeasureFlowCoordinator: ObservableObject {
 
     func saveRecord(to destination: MeasureFlow.SaveDestination,
                     in context: ModelContext) async {
+        guard !isSaving else { return }   // 防重複點擊
         guard let shot = currentShot else { return }
         guard let species = flow.selectedSpecies else {
             _ = flow.save(to: destination)   // 標記魚種必填
             return
         }
+        isSaving = true
+        defer { isSaving = false }
+        logger.info("saveRecord: start")
 
         let length = adjustedLengthCM
         let settings = AppSettings()
@@ -211,9 +220,11 @@ final class MeasureFlowCoordinator: ObservableObject {
         }
 
         do {
+            logger.info("saveRecord: saving photo")
             let localID = try await captureService.save(image: imageToSave,
                                                         location: shot.location,
                                                         placeName: shot.placeName)
+            logger.info("saveRecord: inserting record")
             let record = CatchRecord(
                 lengthCM: length,
                 measureMethod: shot.arLengthCM != nil ? shot.measureMethod : "manual-scale",
@@ -232,8 +243,16 @@ final class MeasureFlowCoordinator: ObservableObject {
             _ = flow.save(to: destination)
             currentShot = nil
             selectedReference = ScaleReference.catalog[0]
+            logger.info("saveRecord: done")
             showToast("已儲存至本機 · 有網路時自動同步")
+        } catch CaptureError.photoLibraryDenied {
+            logger.error("saveRecord: photo library denied")
+            showToast("沒有相簿權限:請到「設定 > FishMeasureAR」開啟照片權限")
+        } catch CaptureError.timedOut {
+            logger.error("saveRecord: photo save timed out")
+            showToast("寫入相簿逾時,照片未儲存,請再試一次")
         } catch {
+            logger.error("saveRecord: failed \(error.localizedDescription)")
             showToast("儲存失敗:\(error.localizedDescription)")
         }
     }

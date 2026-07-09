@@ -4,11 +4,13 @@ import Photos
 import ImageIO
 import CoreLocation
 import UniformTypeIdentifiers
+import os
 
 enum CaptureError: Error {
     case snapshotFailed
     case encodeFailed
     case photoLibraryDenied
+    case timedOut
 }
 
 /// 拍攝服務:AR 快照、浮水印合成 → 寫入 EXIF GPS → 存入相簿
@@ -25,17 +27,23 @@ final class CaptureService {
         }
     }
 
+    private let logger = Logger(subsystem: "com.blackie.FishMeasureAR",
+                                category: "capture")
+
     /// 浮水印(日期/地點;長度標籤由 ImageAnnotator 於量測位置合成)
     /// + EXIF + 相簿。回傳 PHAsset localIdentifier。
+    /// 授權對話框等待不設限;寫入相簿本身 15 秒逾時,不讓 UI 永久卡死。
     func save(image: UIImage,
               location: CLLocation?,
               placeName: String?) async throws -> String {
 
+        logger.info("save: start (\(Int(image.size.width))x\(Int(image.size.height)))")
         let settings = AppSettings()
         let final = settings.watermarkEnabled
             ? addWatermark(to: image,
                            placeName: settings.watermarkShowsPlace ? placeName : nil)
             : image
+        logger.info("save: watermark done")
 
         // 依隱私設定決定寫入的座標(模糊化或原始)
         let gpsLocation: CLLocation? = {
@@ -44,7 +52,39 @@ final class CaptureService {
         }()
 
         let data = try encodeJPEGWithMetadata(final, location: gpsLocation)
-        return try await saveToPhotoLibrary(data)
+        logger.info("save: jpeg encoded (\(data.count) bytes)")
+
+        // 授權(可能跳系統對話框,等多久都合理,不設逾時)
+        let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
+        logger.info("save: photo auth = \(status.rawValue)")
+        guard status == .authorized || status == .limited else {
+            throw CaptureError.photoLibraryDenied
+        }
+
+        // 寫入相簿:15 秒逾時保護
+        let localID = try await withTimeout(seconds: 15) {
+            try await Self.writeToPhotoLibrary(data)
+        }
+        logger.info("save: done, localID=\(localID)")
+        return localID
+    }
+
+    /// 兩個子任務賽跑:操作 vs 逾時;逾時先到就丟 timedOut。
+    private func withTimeout<T: Sendable>(
+        seconds: Double,
+        operation: @escaping @Sendable () async throws -> T) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask { try await operation() }
+            group.addTask {
+                try await Task.sleep(for: .seconds(seconds))
+                throw CaptureError.timedOut
+            }
+            guard let result = try await group.next() else {
+                throw CaptureError.timedOut
+            }
+            group.cancelAll()
+            return result
+        }
     }
 
     // MARK: 浮水印
@@ -129,13 +169,8 @@ final class CaptureService {
 
     // MARK: PhotoKit
 
-    private func saveToPhotoLibrary(_ data: Data) async throws -> String {
-        let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
-        guard status == .authorized || status == .limited else {
-            throw CaptureError.photoLibraryDenied
-        }
-
-        return try await withCheckedThrowingContinuation { cont in
+    private static func writeToPhotoLibrary(_ data: Data) async throws -> String {
+        try await withCheckedThrowingContinuation { cont in
             var localID = ""
             PHPhotoLibrary.shared().performChanges({
                 let request = PHAssetCreationRequest.forAsset()
