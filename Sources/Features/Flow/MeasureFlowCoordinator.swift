@@ -102,7 +102,10 @@ final class MeasureFlowCoordinator: ObservableObject {
 
     // MARK: 拍照(測距儀式:快照已含 3D 點與線段,再合成長度標籤)
 
-    func takeShot(from controller: TapMeasureSessionController) {
+    /// - Parameter bubbleOffset: 使用者拖曳數字氣泡的偏移(view 座標),
+    ///   照片合成沿用同一偏移(換算至影像像素),所見即所得。
+    func takeShot(from controller: TapMeasureSessionController,
+                  bubbleOffset: CGSize = .zero) {
         guard let arView = controller.arView else { return }
         let lengthCM = controller.lengthCM
         let endpointsInView = controller.projectedEndpoints()
@@ -134,10 +137,14 @@ final class MeasureFlowCoordinator: ObservableObject {
                     let p1 = PlanePoint(x: v1.x * sx, y: v1.y * sy)
                     let p2 = PlanePoint(x: v2.x * sx, y: v2.y * sy)
                     endpointsPx = (p1, p2)
-                    let labelPos = MeasureAnnotationLayout.labelPosition(
-                        p1: p1, p2: p2,
-                        offset: image.size.width * 0.06,
-                        width: image.size.width, height: image.size.height)
+                    // 與螢幕氣泡同一算式:線中點 + 使用者偏移(換算像素)
+                    let labelPos = MeasureAnnotationLayout.displayPosition(
+                        midpoint: PlanePoint(x: (p1.x + p2.x) / 2,
+                                             y: (p1.y + p2.y) / 2),
+                        offsetX: bubbleOffset.width * sx,
+                        offsetY: bubbleOffset.height * sy,
+                        width: image.size.width, height: image.size.height,
+                        margin: image.size.width * 0.06)
                     image = ImageAnnotator.drawLengthLabel(
                         String(format: "%.1f cm", lengthCM),
                         at: CGPoint(x: labelPos.x, y: labelPos.y),

@@ -24,6 +24,9 @@ struct CaptureView: View {
     @ObservedObject var coordinator: MeasureFlowCoordinator
     @ObservedObject private var controller: TapMeasureSessionController
     @State private var flash = false
+    /// 使用者拖曳數字氣泡的偏移(相對線中點;照片合成沿用同值,所見即所得)
+    @State private var bubbleOffset: CGSize = .zero
+    @GestureState private var bubbleDragDelta: CGSize = .zero
     @Query private var records: [CatchRecord]
 
     init(coordinator: MeasureFlowCoordinator) {
@@ -90,7 +93,7 @@ struct CaptureView: View {
         switch controller.measure.points.count {
         case 0:  return "準星對準吻端,按「＋」標 A 點"
         case 1:  return "移到尾叉,按「＋」標 B 點"
-        default: return "量測完成,按快門拍照"
+        default: return "完成!可拖曳數字避開魚身,按快門拍照"
         }
     }
 
@@ -108,11 +111,26 @@ struct CaptureView: View {
 
             if let mid = controller.lineMidpointInView,
                let cm = controller.lengthCM ?? controller.previewLengthCM {
-                // 氣泡位置夾在預覽範圍內,貼邊不被裁切
-                lengthBubble(cm: cm, final: controller.measure.isComplete)
-                    .position(x: min(max(mid.x, 64), width - 64),
-                              y: min(max(mid.y, 26), height - 26))
-                    .allowsHitTesting(false)
+                let isFinal = controller.measure.isComplete
+                // 線中點 + 使用者偏移,夾在預覽內(與照片合成同一算式)
+                let pos = MeasureAnnotationLayout.displayPosition(
+                    midpoint: PlanePoint(x: mid.x, y: mid.y),
+                    offsetX: bubbleOffset.width + bubbleDragDelta.width,
+                    offsetY: bubbleOffset.height + bubbleDragDelta.height,
+                    width: width, height: height, margin: 44)
+                lengthBubble(cm: cm, final: isFinal)
+                    .position(x: pos.x, y: pos.y)
+                    .allowsHitTesting(isFinal)   // 量測完成後才可拖曳
+                    .gesture(
+                        DragGesture()
+                            .updating($bubbleDragDelta) { value, state, _ in
+                                state = value.translation
+                            }
+                            .onEnded { value in
+                                bubbleOffset.width += value.translation.width
+                                bubbleOffset.height += value.translation.height
+                            },
+                        including: isFinal ? .all : .none)
             }
 
             if flash {
@@ -121,6 +139,9 @@ struct CaptureView: View {
         }
         .frame(width: width, height: height)
         .clipped()
+        .onChange(of: controller.measure.isComplete) { _, complete in
+            if !complete { bubbleOffset = .zero }   // 重量測時歸位
+        }
     }
 
     private var reticle: some View {
@@ -190,7 +211,7 @@ struct CaptureView: View {
                     try? await Task.sleep(for: .milliseconds(150))
                     withAnimation(.easeOut(duration: 0.25)) { flash = false }
                 }
-                coordinator.takeShot(from: controller)
+                coordinator.takeShot(from: controller, bubbleOffset: bubbleOffset)
             }
         } label: {
             ZStack {
