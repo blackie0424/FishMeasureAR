@@ -149,6 +149,11 @@ struct PhotoThumbnail: View {
             }
         }
         .task(id: localID) {
+            // 讀相簿需要讀取授權(與「加入照片」是兩種權限);
+            // 未授權就顯示占位圖,不可在無 usage description 下觸發讀取(會被系統終止)
+            let status = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
+            guard status == .authorized || status == .limited else { return }
+
             let assets = PHAsset.fetchAssets(withLocalIdentifiers: [localID], options: nil)
             guard let asset = assets.firstObject else { return }
             let options = PHImageRequestOptions()
