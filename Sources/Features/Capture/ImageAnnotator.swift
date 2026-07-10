@@ -4,6 +4,27 @@ import UIKit
 /// 量測線本身是 RealityKit 3D 實體,ARView 快照已包含,這裡只補標籤。
 enum ImageAnnotator {
 
+    /// 把參照物疊圖(已去背)畫進照片:
+    /// 以長邊等比縮放到 longSidePx(對應實際 cm/px),中心對齊指定點。
+    static func drawOverlay(_ overlay: UIImage,
+                            centeredAt center: CGPoint,
+                            longSidePx: CGFloat,
+                            on image: UIImage) -> UIImage {
+        let longSide = max(overlay.size.width, overlay.size.height)
+        guard longSide > 0, longSidePx > 0 else { return image }
+        let scale = longSidePx / longSide
+        let size = CGSize(width: overlay.size.width * scale,
+                          height: overlay.size.height * scale)
+
+        let renderer = UIGraphicsImageRenderer(size: image.size)
+        return renderer.image { _ in
+            image.draw(at: .zero)
+            overlay.draw(in: CGRect(x: center.x - size.width / 2,
+                                    y: center.y - size.height / 2,
+                                    width: size.width, height: size.height))
+        }
+    }
+
     /// 量魚/比例尺路徑用:照片上沒有 3D 線段,把量測線+端點+標籤一起畫上。
     static func drawMeasurement(from p1: CGPoint, to p2: CGPoint,
                                 label: String, labelAt labelPoint: CGPoint,

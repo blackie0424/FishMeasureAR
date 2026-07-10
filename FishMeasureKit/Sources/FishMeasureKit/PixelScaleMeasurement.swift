@@ -40,4 +40,11 @@ public enum PixelScaleMeasurement {
                               cmPerPixel: Double) -> Double {
         a.distance(to: b) * cmPerPixel
     }
+
+    /// 實際長度(cm)在該照片上應占的像素數(參照物疊圖等比縮放用)。
+    public static func pixelLength(forCM cm: Double,
+                                   cmPerPixel: Double) -> Double? {
+        guard cm > 0, cmPerPixel > 0 else { return nil }
+        return cm / cmPerPixel
+    }
 }

@@ -19,6 +19,13 @@ final class MeasureFlowCoordinator: ObservableObject {
     /// 儲存進行中(表單顯示旋轉指示、鎖定按鈕防重複點擊)
     @Published private(set) var isSaving = false
 
+    // MARK: 參照物疊圖(拍照後在表單擺放,存檔時等比合成)
+
+    @Published private(set) var overlayReference: ScaleReference?
+    @Published private(set) var overlayImage: UIImage?
+    /// 疊圖中心(影像像素座標),表單上拖曳更新
+    @Published var overlayCenter: PlanePoint?
+
     let locationService = LocationService()
     /// 跨畫面共用:AR session 不隨畫面切換銷毀,回到拍攝免重新等待平面偵測
     let tapController = TapMeasureSessionController()
@@ -100,6 +107,45 @@ final class MeasureFlowCoordinator: ObservableObject {
         currentShot?.arLengthCM != nil && currentShot?.originalFishA != nil
     }
 
+    /// 這張照片的 cm/px(疊圖等比縮放用):量測長度 ÷ 端點像素距離
+    var shotCMPerPixel: Double? {
+        guard let shot = currentShot, let length = adjustedLengthCM else { return nil }
+        return PixelScaleMeasurement.cmPerPixel(lengthCM: length,
+                                                pointA: shot.fishA,
+                                                pointB: shot.fishB)
+    }
+
+    /// 疊圖在照片上的長邊像素(依實際 cm 等比)
+    var overlayLongSidePx: Double? {
+        guard let refCM = overlayReference?.lengthCM,
+              let cmPerPx = shotCMPerPixel else { return nil }
+        return PixelScaleMeasurement.pixelLength(forCM: refCM, cmPerPixel: cmPerPx)
+    }
+
+    /// 選擇/取消參照物疊圖;首次選擇時去背並置於照片中下方
+    func selectOverlay(_ reference: ScaleReference?) {
+        guard let reference, let imageName = reference.imageName else {
+            overlayReference = nil
+            overlayImage = nil
+            overlayCenter = nil
+            return
+        }
+        overlayReference = reference
+        if overlayCenter == nil, let shot = currentShot {
+            overlayCenter = PlanePoint(x: shot.image.size.width * 0.5,
+                                       y: shot.image.size.height * 0.78)
+        }
+        Task { @MainActor in
+            overlayImage = await ReferenceCutout.load(named: imageName)
+        }
+    }
+
+    private func clearOverlay() {
+        overlayReference = nil
+        overlayImage = nil
+        overlayCenter = nil
+    }
+
     // MARK: 拍照(測距儀式:快照已含 3D 點與線段,再合成長度標籤)
 
     /// - Parameters:
@@ -176,6 +222,7 @@ final class MeasureFlowCoordinator: ObservableObject {
 
     func backToCapture() {
         currentShot = nil
+        clearOverlay()
         tapController.reset()   // 清上一尾的點位,世界地圖保留
         flow.backToCapture()
     }
@@ -224,11 +271,23 @@ final class MeasureFlowCoordinator: ObservableObject {
             watermarkEnabled: settings.watermarkEnabled,
             watermarkPlace: settings.watermarkShowsPlace ? shot.placeName : nil,
             gpsLocation: exifLocation)
-        let usedReference = !hasMetricLength && selectedReference.lengthCM != nil
+        var usedReference = !hasMetricLength && selectedReference.lengthCM != nil
             ? [selectedReference.id] : []
 
-        // 量魚/比例尺路徑:照片還沒有線段,存檔前把線+端點+標籤合成進去
         var imageToSave = shot.image
+
+        // 參照物疊圖:去背圖依實際 cm/px 等比縮放,合成在使用者擺放的位置
+        if let overlayImage, let center = overlayCenter,
+           let longSide = overlayLongSidePx {
+            imageToSave = ImageAnnotator.drawOverlay(
+                overlayImage,
+                centeredAt: CGPoint(x: center.x, y: center.y),
+                longSidePx: longSide,
+                on: imageToSave)
+            if let id = overlayReference?.id { usedReference.append(id) }
+        }
+
+        // 量魚/比例尺路徑:照片還沒有線段,存檔前把線+端點+標籤合成進去
         if !shot.labelComposited, let length {
             let size = shot.image.size
             let labelPos = MeasureAnnotationLayout.labelPosition(
@@ -241,7 +300,7 @@ final class MeasureFlowCoordinator: ObservableObject {
                 label: String(format: "%.1f cm", length),
                 labelAt: CGPoint(x: labelPos.x, y: labelPos.y),
                 rotationDegrees: settings.bubbleRotationDegrees,
-                on: shot.image)
+                on: imageToSave)
         }
 
         do {
@@ -267,6 +326,7 @@ final class MeasureFlowCoordinator: ObservableObject {
             _ = flow.save(to: destination)
             currentShot = nil
             selectedReference = ScaleReference.catalog[0]
+            clearOverlay()
             tapController.reset()   // 下一尾從乾淨的點位開始
             logger.info("saveRecord: done")
             showToast("已儲存至本機 · 有網路時自動同步")
