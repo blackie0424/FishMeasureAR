@@ -27,6 +27,8 @@ struct CaptureView: View {
     /// 使用者拖曳數字氣泡的偏移(相對線中點;照片合成沿用同值,所見即所得)
     @State private var bubbleOffset: CGSize = .zero
     @GestureState private var bubbleDragDelta: CGSize = .zero
+    /// 氣泡角度:垂直俯拍時重力無法判斷橫直向,由使用者手動切換並記住
+    @AppStorage("bubbleRotationDegrees") private var bubbleRotation = 0
     @Query private var records: [CatchRecord]
 
     init(coordinator: MeasureFlowCoordinator) {
@@ -71,6 +73,7 @@ struct CaptureView: View {
                     modeToggle
                 }
                 Spacer()
+                rotateBubbleButton
                 recordCountButton
             }
             Text(hintText)
@@ -121,6 +124,7 @@ struct CaptureView: View {
                 // 手勢必須掛在氣泡「本體」上、再做 position——
                 // 掛在 position 之後等於掛在整個定位容器,點擊判定會失效(實機驗證過)
                 lengthBubble(cm: cm, final: isFinal)
+                    .rotationEffect(.degrees(Double(bubbleRotation)))
                     .padding(14)                    // 透明外距,加大觸控範圍
                     .contentShape(Rectangle())
                     .highPriorityGesture(
@@ -215,7 +219,9 @@ struct CaptureView: View {
                     try? await Task.sleep(for: .milliseconds(150))
                     withAnimation(.easeOut(duration: 0.25)) { flash = false }
                 }
-                coordinator.takeShot(from: controller, bubbleOffset: bubbleOffset)
+                coordinator.takeShot(from: controller,
+                                     bubbleOffset: bubbleOffset,
+                                     bubbleRotationDegrees: bubbleRotation)
             }
         } label: {
             ZStack {
@@ -268,6 +274,24 @@ struct CaptureView: View {
                 .padding(.horizontal, 12).padding(.vertical, 6)
                 .background(Color.white.opacity(0.12), in: Capsule())
                 .foregroundStyle(.white)
+        }
+    }
+
+    /// 切換數字方向(90° 循環,記住設定):橫向拍照時把數字轉正
+    private var rotateBubbleButton: some View {
+        Button {
+            bubbleRotation = MeasureAnnotationLayout.nextRotation(bubbleRotation)
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "rotate.right")
+                Text("cm")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .rotationEffect(.degrees(Double(bubbleRotation)))
+            }
+            .font(.caption)
+            .padding(.horizontal, 10).padding(.vertical, 6)
+            .background(Color.white.opacity(0.12), in: Capsule())
+            .foregroundStyle(.white.opacity(0.85))
         }
     }
 
