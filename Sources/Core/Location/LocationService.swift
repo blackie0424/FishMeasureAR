@@ -70,13 +70,19 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
     }
 
     // MARK: CLLocationManagerDelegate
+    // nonisolated 滿足協定的非隔離需求(Swift 6 conformance),再跳回 MainActor 處理
 
-    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        finish(with: locations.first)
+    nonisolated func locationManager(_ manager: CLLocationManager,
+                                     didUpdateLocations locations: [CLLocation]) {
+        let location = locations.first
+        Task { @MainActor in self.finish(with: location) }
     }
 
-    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        logger.warning("didFailWithError: \(error.localizedDescription)")
-        finish(with: nil)
+    nonisolated func locationManager(_ manager: CLLocationManager,
+                                     didFailWithError error: Error) {
+        Task { @MainActor in
+            self.logger.warning("didFailWithError: \(error.localizedDescription)")
+            self.finish(with: nil)
+        }
     }
 }
