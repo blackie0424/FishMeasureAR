@@ -200,9 +200,19 @@ final class MeasureFlowCoordinator: ObservableObject {
         logger.info("saveRecord: start")
 
         let length = adjustedLengthCM
+        // 設定值一律在 MainActor 讀好(@AppStorage 不保證非主執行緒安全),
+        // 打包成 Sendable options 再交給背景儲存
         let settings = AppSettings()
         let fuzz = settings.fuzzLocation && shot.location != nil
         let storedLocation = fuzz ? shot.location?.fuzzed() : shot.location
+        let exifLocation: CLLocation? = {
+            guard let location = shot.location, settings.embedGPSInPhoto else { return nil }
+            return settings.fuzzLocation ? location.fuzzed() : location
+        }()
+        let saveOptions = PhotoSaveOptions(
+            watermarkEnabled: settings.watermarkEnabled,
+            watermarkPlace: settings.watermarkShowsPlace ? shot.placeName : nil,
+            gpsLocation: exifLocation)
         let usedReference = !hasMetricLength && selectedReference.lengthCM != nil
             ? [selectedReference.id] : []
 
@@ -225,8 +235,7 @@ final class MeasureFlowCoordinator: ObservableObject {
         do {
             logger.info("saveRecord: saving photo")
             let localID = try await captureService.save(image: imageToSave,
-                                                        location: shot.location,
-                                                        placeName: shot.placeName)
+                                                        options: saveOptions)
             logger.info("saveRecord: inserting record")
             let record = CatchRecord(
                 lengthCM: length,

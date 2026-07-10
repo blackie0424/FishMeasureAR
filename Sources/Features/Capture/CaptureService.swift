@@ -13,6 +13,16 @@ enum CaptureError: Error {
     case timedOut
 }
 
+/// 相簿儲存選項:設定值一律在 MainActor 先讀好再傳入,
+/// 服務本體不碰 @AppStorage(SwiftUI 包裝器不保證非主執行緒安全)。
+struct PhotoSaveOptions: Sendable {
+    let watermarkEnabled: Bool
+    /// nil = 浮水印不顯示地點
+    let watermarkPlace: String?
+    /// 寫入 EXIF 的座標(已含隱私模糊化處理);nil = 不寫入
+    let gpsLocation: CLLocation?
+}
+
 /// 拍攝服務:AR 快照、浮水印合成 → 寫入 EXIF GPS → 存入相簿
 final class CaptureService {
 
@@ -33,25 +43,15 @@ final class CaptureService {
     /// 浮水印(日期/地點;長度標籤由 ImageAnnotator 於量測位置合成)
     /// + EXIF + 相簿。回傳 PHAsset localIdentifier。
     /// 授權對話框等待不設限;寫入相簿本身 15 秒逾時,不讓 UI 永久卡死。
-    func save(image: UIImage,
-              location: CLLocation?,
-              placeName: String?) async throws -> String {
+    func save(image: UIImage, options: PhotoSaveOptions) async throws -> String {
 
         logger.info("save: start (\(Int(image.size.width))x\(Int(image.size.height)))")
-        let settings = AppSettings()
-        let final = settings.watermarkEnabled
-            ? addWatermark(to: image,
-                           placeName: settings.watermarkShowsPlace ? placeName : nil)
+        let final = options.watermarkEnabled
+            ? addWatermark(to: image, placeName: options.watermarkPlace)
             : image
         logger.info("save: watermark done")
 
-        // 依隱私設定決定寫入的座標(模糊化或原始)
-        let gpsLocation: CLLocation? = {
-            guard let location, settings.embedGPSInPhoto else { return nil }
-            return settings.fuzzLocation ? location.fuzzed() : location
-        }()
-
-        let data = try encodeJPEGWithMetadata(final, location: gpsLocation)
+        let data = try encodeJPEGWithMetadata(final, location: options.gpsLocation)
         logger.info("save: jpeg encoded (\(data.count) bytes)")
 
         // 授權(可能跳系統對話框,等多久都合理,不設逾時)
@@ -69,21 +69,33 @@ final class CaptureService {
         return localID
     }
 
-    /// 兩個子任務賽跑:操作 vs 逾時;逾時先到就丟 timedOut。
+    /// 先到先贏的逾時:不能用 TaskGroup——group 會等所有子任務結束,
+    /// 而相簿寫入不可取消,一旦寫入卡住,逾時分支根本救不出 UI。
+    /// 改為 continuation 由先完成者 resume,遲到者被旗標擋掉。
     private func withTimeout<T: Sendable>(
         seconds: Double,
         operation: @escaping @Sendable () async throws -> T) async throws -> T {
-        try await withThrowingTaskGroup(of: T.self) { group in
-            group.addTask { try await operation() }
-            group.addTask {
-                try await Task.sleep(for: .seconds(seconds))
-                throw CaptureError.timedOut
+        try await withCheckedThrowingContinuation { cont in
+            let resumed = OSAllocatedUnfairLock(initialState: false)
+            @Sendable func claimFirst() -> Bool {
+                resumed.withLock { already in
+                    if already { return false }
+                    already = true
+                    return true
+                }
             }
-            guard let result = try await group.next() else {
-                throw CaptureError.timedOut
+            Task {
+                do {
+                    let value = try await operation()
+                    if claimFirst() { cont.resume(returning: value) }
+                } catch {
+                    if claimFirst() { cont.resume(throwing: error) }
+                }
             }
-            group.cancelAll()
-            return result
+            Task {
+                try? await Task.sleep(for: .seconds(seconds))
+                if claimFirst() { cont.resume(throwing: CaptureError.timedOut) }
+            }
         }
     }
 
