@@ -27,6 +27,14 @@ public enum MeasureAnnotationLayout {
         return candidate
     }
 
+    /// 氣泡旋轉 90° 循環(垂直俯拍時重力無法判斷橫直向,由使用者手動切換;
+    /// 任意輸入先正規化並向下取整到 90 的倍數)。
+    public static func nextRotation(_ degrees: Int) -> Int {
+        let normalized = ((degrees % 360) + 360) % 360
+        let quarter = normalized / 90
+        return ((quarter + 1) * 90) % 360
+    }
+
     /// 數字氣泡顯示位置:線中點 + 使用者拖曳偏移,夾在邊界內。
     /// 螢幕顯示與照片合成共用同一算式,保證所見即所得。
     public static func displayPosition(midpoint: PlanePoint,

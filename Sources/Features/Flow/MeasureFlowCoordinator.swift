@@ -102,10 +102,13 @@ final class MeasureFlowCoordinator: ObservableObject {
 
     // MARK: 拍照(測距儀式:快照已含 3D 點與線段,再合成長度標籤)
 
-    /// - Parameter bubbleOffset: 使用者拖曳數字氣泡的偏移(view 座標),
-    ///   照片合成沿用同一偏移(換算至影像像素),所見即所得。
+    /// - Parameters:
+    ///   - bubbleOffset: 使用者拖曳數字氣泡的偏移(view 座標),
+    ///     照片合成沿用同一偏移(換算至影像像素),所見即所得。
+    ///   - bubbleRotationDegrees: 氣泡角度(橫向拍攝時 90/270),合成同角度。
     func takeShot(from controller: TapMeasureSessionController,
-                  bubbleOffset: CGSize = .zero) {
+                  bubbleOffset: CGSize = .zero,
+                  bubbleRotationDegrees: Int = 0) {
         guard let arView = controller.arView else { return }
         let lengthCM = controller.lengthCM
         let endpointsInView = controller.projectedEndpoints()
@@ -148,6 +151,7 @@ final class MeasureFlowCoordinator: ObservableObject {
                     image = ImageAnnotator.drawLengthLabel(
                         String(format: "%.1f cm", lengthCM),
                         at: CGPoint(x: labelPos.x, y: labelPos.y),
+                        rotationDegrees: bubbleRotationDegrees,
                         on: raw)
                 }
                 currentShot = Shot(image: image, capturedAt: .now,
@@ -236,6 +240,7 @@ final class MeasureFlowCoordinator: ObservableObject {
                 to: CGPoint(x: shot.fishB.x, y: shot.fishB.y),
                 label: String(format: "%.1f cm", length),
                 labelAt: CGPoint(x: labelPos.x, y: labelPos.y),
+                rotationDegrees: settings.bubbleRotationDegrees,
                 on: shot.image)
         }
 
