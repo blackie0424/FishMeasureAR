@@ -20,6 +20,8 @@ final class MeasureFlowCoordinator: ObservableObject {
     @Published private(set) var isSaving = false
 
     let locationService = LocationService()
+    /// 跨畫面共用:AR session 不隨畫面切換銷毀,回到拍攝免重新等待平面偵測
+    let tapController = TapMeasureSessionController()
     private let captureService = CaptureService()
     private var toastTask: Task<Void, Never>?
     private let logger = Logger(subsystem: "com.blackie.FishMeasureAR",
@@ -163,6 +165,7 @@ final class MeasureFlowCoordinator: ObservableObject {
 
     func backToCapture() {
         currentShot = nil
+        tapController.reset()   // 清上一尾的點位,世界地圖保留
         flow.backToCapture()
     }
 
@@ -243,6 +246,7 @@ final class MeasureFlowCoordinator: ObservableObject {
             _ = flow.save(to: destination)
             currentShot = nil
             selectedReference = ScaleReference.catalog[0]
+            tapController.reset()   // 下一尾從乾淨的點位開始
             logger.info("saveRecord: done")
             showToast("已儲存至本機 · 有網路時自動同步")
         } catch CaptureError.photoLibraryDenied {
