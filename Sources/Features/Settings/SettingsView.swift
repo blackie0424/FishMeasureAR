@@ -6,6 +6,8 @@ struct AppSettings {
     @AppStorage("embedGPSInPhoto") var embedGPSInPhoto = true     // 照片是否寫入 GPS
     @AppStorage("watermarkEnabled") var watermarkEnabled = true
     @AppStorage("watermarkShowsPlace") var watermarkShowsPlace = true
+    /// 數字氣泡角度(0/90/180/270);橫向拍攝設一次即記住
+    @AppStorage("bubbleRotationDegrees") var bubbleRotationDegrees = 0
 }
 
 struct SettingsView: View {

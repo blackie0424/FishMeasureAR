@@ -7,6 +7,7 @@ enum ImageAnnotator {
     /// 量魚/比例尺路徑用:照片上沒有 3D 線段,把量測線+端點+標籤一起畫上。
     static func drawMeasurement(from p1: CGPoint, to p2: CGPoint,
                                 label: String, labelAt labelPoint: CGPoint,
+                                rotationDegrees: Int = 0,
                                 on image: UIImage) -> UIImage {
         let renderer = UIGraphicsImageRenderer(size: image.size)
         let withLine = renderer.image { _ in
@@ -29,14 +30,18 @@ enum ImageAnnotator {
                 dot.fill()
             }
         }
-        return drawLengthLabel(label, at: labelPoint, on: withLine)
+        return drawLengthLabel(label, at: labelPoint,
+                               rotationDegrees: rotationDegrees, on: withLine)
     }
 
+    /// - Parameter rotationDegrees: 標籤繞自身中心旋轉(橫向拍攝時 90/270,
+    ///   與螢幕氣泡的 rotationEffect 同角度,所見即所得)
     static func drawLengthLabel(_ text: String,
                                 at point: CGPoint,
+                                rotationDegrees: Int = 0,
                                 on image: UIImage) -> UIImage {
         let renderer = UIGraphicsImageRenderer(size: image.size)
-        return renderer.image { _ in
+        return renderer.image { ctx in
             image.draw(at: .zero)
 
             let fontSize = image.size.width * 0.045
@@ -46,24 +51,25 @@ enum ImageAnnotator {
             ]
             let textSize = (text as NSString).size(withAttributes: attrs)
             let padH = fontSize * 0.6, padV = fontSize * 0.35
+            let labelSize = CGSize(width: textSize.width + padH * 2,
+                                   height: textSize.height + padV * 2)
 
-            var rect = CGRect(x: point.x - textSize.width / 2 - padH,
-                              y: point.y - textSize.height / 2 - padV,
-                              width: textSize.width + padH * 2,
-                              height: textSize.height + padV * 2)
-            rect.origin.x = min(max(rect.origin.x, 8),
-                                image.size.width - rect.width - 8)
-            rect.origin.y = min(max(rect.origin.y, 8),
-                                image.size.height - rect.height - 8)
+            let cg = ctx.cgContext
+            cg.saveGState()
+            cg.translateBy(x: point.x, y: point.y)
+            cg.rotate(by: CGFloat(rotationDegrees) * .pi / 180)
 
+            // 以旋轉後的原點為中心繪製
+            let rect = CGRect(x: -labelSize.width / 2, y: -labelSize.height / 2,
+                              width: labelSize.width, height: labelSize.height)
             let capsule = UIBezierPath(roundedRect: rect,
                                        cornerRadius: rect.height / 2)
             UIColor.black.withAlphaComponent(0.65).setFill()
             capsule.fill()
             (text as NSString).draw(
-                at: CGPoint(x: rect.midX - textSize.width / 2,
-                            y: rect.midY - textSize.height / 2),
+                at: CGPoint(x: -textSize.width / 2, y: -textSize.height / 2),
                 withAttributes: attrs)
+            cg.restoreGState()
         }
     }
 }

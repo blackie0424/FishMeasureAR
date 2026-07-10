@@ -28,6 +28,20 @@ final class MeasureAnnotationLayoutTests: XCTestCase {
         XCTAssertEqual(pos.y, 460, accuracy: 1e-9, "退化線段:直接放點上方")
     }
 
+    // MARK: 氣泡旋轉(橫向拍攝時調整數字方向,90° 循環)
+
+    func testRotationCyclesQuarterTurns() {
+        XCTAssertEqual(MeasureAnnotationLayout.nextRotation(0), 90)
+        XCTAssertEqual(MeasureAnnotationLayout.nextRotation(90), 180)
+        XCTAssertEqual(MeasureAnnotationLayout.nextRotation(180), 270)
+        XCTAssertEqual(MeasureAnnotationLayout.nextRotation(270), 0, "轉滿一圈回正")
+    }
+
+    func testRotationNormalizesArbitraryInput() {
+        XCTAssertEqual(MeasureAnnotationLayout.nextRotation(45), 90, "非 90 倍數就近取整到下一段")
+        XCTAssertEqual(MeasureAnnotationLayout.nextRotation(-90), 0)
+    }
+
     // MARK: 使用者拖曳氣泡:線中點 + 偏移 + 邊界夾制(螢幕與照片共用同一算式)
 
     func testDisplayPositionZeroOffsetSitsOnMidpoint() {
