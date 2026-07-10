@@ -26,10 +26,18 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
         }
     }
 
-    /// 單次定位,10 秒逾時;併發呼叫共享同一次結果。
+    /// 單次定位;併發呼叫共享同一次結果。
+    /// 60 秒內的已知位置直接回覆(拍照流程不等定位);否則最多等 3 秒。
+    /// (曾為 10 秒:實機上每拍一張都卡滿 10 秒才進表單,體感極差)
     func currentLocation() async -> CLLocation? {
         guard manager.authorizationStatus == .authorizedWhenInUse ||
               manager.authorizationStatus == .authorizedAlways else { return nil }
+
+        if let cached = manager.location,
+           Date().timeIntervalSince(cached.timestamp) < 60 {
+            manager.requestLocation()   // 順手更新,下一張更準
+            return cached
+        }
 
         logger.info("currentLocation requested (waiters=\(self.continuations.count))")
         return await withCheckedContinuation { cont in
@@ -37,8 +45,8 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
             if continuations.count == 1 {
                 manager.requestLocation()
             }
-            // 10 秒逾時:asyncAfter 於主佇列執行,故可安全 assumeIsolated 回到 MainActor
-            DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
+            // 3 秒逾時:asyncAfter 於主佇列執行,故可安全 assumeIsolated 回到 MainActor
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
                 MainActor.assumeIsolated {
                     guard let self, !self.continuations.isEmpty else { return }
                     self.logger.warning("currentLocation timeout, using last known")

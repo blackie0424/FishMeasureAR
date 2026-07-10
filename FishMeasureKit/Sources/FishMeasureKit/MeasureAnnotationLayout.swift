@@ -26,4 +26,15 @@ public enum MeasureAnnotationLayout {
         candidate.y = min(max(candidate.y, offset), height - offset)
         return candidate
     }
+
+    /// 數字氣泡顯示位置:線中點 + 使用者拖曳偏移,夾在邊界內。
+    /// 螢幕顯示與照片合成共用同一算式,保證所見即所得。
+    public static func displayPosition(midpoint: PlanePoint,
+                                       offsetX: Double, offsetY: Double,
+                                       width: Double, height: Double,
+                                       margin: Double) -> PlanePoint {
+        PlanePoint(
+            x: min(max(midpoint.x + offsetX, margin), width - margin),
+            y: min(max(midpoint.y + offsetY, margin), height - margin))
+    }
 }

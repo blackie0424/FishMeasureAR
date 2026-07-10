@@ -28,6 +28,33 @@ final class MeasureAnnotationLayoutTests: XCTestCase {
         XCTAssertEqual(pos.y, 460, accuracy: 1e-9, "退化線段:直接放點上方")
     }
 
+    // MARK: 使用者拖曳氣泡:線中點 + 偏移 + 邊界夾制(螢幕與照片共用同一算式)
+
+    func testDisplayPositionZeroOffsetSitsOnMidpoint() {
+        let pos = MeasureAnnotationLayout.displayPosition(
+            midpoint: PlanePoint(x: 400, y: 300),
+            offsetX: 0, offsetY: 0,
+            width: 800, height: 600, margin: 50)
+        XCTAssertEqual(pos, PlanePoint(x: 400, y: 300))
+    }
+
+    func testDisplayPositionAppliesUserOffset() {
+        let pos = MeasureAnnotationLayout.displayPosition(
+            midpoint: PlanePoint(x: 400, y: 300),
+            offsetX: -120, offsetY: 80,
+            width: 800, height: 600, margin: 50)
+        XCTAssertEqual(pos, PlanePoint(x: 280, y: 380))
+    }
+
+    func testDisplayPositionClampsToMargin() {
+        // 拖出邊界 → 夾回 margin 內
+        let pos = MeasureAnnotationLayout.displayPosition(
+            midpoint: PlanePoint(x: 400, y: 300),
+            offsetX: 1000, offsetY: -1000,
+            width: 800, height: 600, margin: 50)
+        XCTAssertEqual(pos, PlanePoint(x: 750, y: 50))
+    }
+
     func testLabelIsClampedInsideBounds() {
         // 線貼近上緣,上方放不下 → 夾回邊界內(不小於 offset 邊距)
         let pos = MeasureAnnotationLayout.labelPosition(
