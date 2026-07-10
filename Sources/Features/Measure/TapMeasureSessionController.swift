@@ -30,8 +30,13 @@ final class TapMeasureSessionController: NSObject, ObservableObject, ARSessionDe
     private var previewLine: ModelEntity?
     /// 幀節流:在 delegate 執行緒先過濾,避免每幀都往 MainActor 丟 Task
     private let frameGate = OSAllocatedUnfairLock(initialState: 0)
+    /// 重定位卡死看門狗:limited(.relocalizing) 持續超過門檻就整個重置
+    private var relocalizingSince: Date?
     private let logger = Logger(subsystem: "com.blackie.FishMeasureAR",
                                 category: "ar")
+
+    /// 量測線/點的亮青色(UnlitMaterial 不受場景光照,不會被壓灰)
+    static let lineColor = UIColor(red: 0.21, green: 0.77, blue: 0.94, alpha: 1)
 
     var lengthCM: Double? { measure.lengthCM }
 
@@ -85,6 +90,8 @@ final class TapMeasureSessionController: NSObject, ObservableObject, ARSessionDe
 
     /// 更新準星狀態、預覽線與數字氣泡位置
     private func tick() {
+        watchdogCheckTracking()
+
         let hit = centerWorldPoint()
         reticleHasSurface = hit != nil
 
@@ -116,6 +123,52 @@ final class TapMeasureSessionController: NSObject, ObservableObject, ARSessionDe
             previewLengthCM = nil
             lineMidpointInView = nil
         }
+    }
+
+    // MARK: Session 復原(切到相簿再回來、相機被搶用等情境)
+
+    /// 重定位卡超過 2.5 秒就整個重置——寧可重新掃描,也不要準星永遠灰著像當機。
+    private func watchdogCheckTracking() {
+        guard let state = arView?.session.currentFrame?.camera.trackingState else { return }
+        if case .limited(.relocalizing) = state {
+            if let since = relocalizingSince {
+                if Date().timeIntervalSince(since) > 2.5 {
+                    logger.warning("relocalizing stuck > 2.5s, restarting session")
+                    relocalizingSince = nil
+                    restartSession()
+                }
+            } else {
+                relocalizingSince = Date()
+            }
+        } else {
+            relocalizingSince = nil
+        }
+    }
+
+    /// Session 死亡(如相機被其他 App 佔用後歸還)不會自己復活,必須手動重跑
+    nonisolated func session(_ session: ARSession, didFailWithError error: Error) {
+        Task { @MainActor in
+            self.logger.error("ARSession failed: \(error.localizedDescription) — restarting")
+            self.restartSession()
+        }
+    }
+
+    nonisolated func sessionWasInterrupted(_ session: ARSession) {
+        Task { @MainActor in self.logger.info("ARSession interrupted") }
+    }
+
+    nonisolated func sessionInterruptionEnded(_ session: ARSession) {
+        Task { @MainActor in
+            self.logger.info("ARSession interruption ended — restarting")
+            self.restartSession()
+        }
+    }
+
+    /// 全新重跑:中斷後舊點位已不可信,一併清除
+    private func restartSession() {
+        reset()
+        arView?.session.run(configuration(),
+                            options: [.resetTracking, .removeExistingAnchors])
     }
 
     // MARK: 量測操作
@@ -216,8 +269,8 @@ final class TapMeasureSessionController: NSObject, ObservableObject, ARSessionDe
         let length = simd_distance(a, b)
         guard length > 0.001 else { return }
         let entity = ModelEntity(
-            mesh: .generateBox(size: [length, 0.0025, 0.0025]),
-            materials: [SimpleMaterial(color: .white, isMetallic: false)])
+            mesh: .generateBox(size: [length, 0.003, 0.003]),
+            materials: [UnlitMaterial(color: Self.lineColor)])
         entity.orientation = simd_quatf(from: [1, 0, 0], to: simd_normalize(b - a))
         let anchor = AnchorEntity(world: (a + b) / 2)
         anchor.addChild(entity)
@@ -232,9 +285,8 @@ final class TapMeasureSessionController: NSObject, ObservableObject, ARSessionDe
         if previewAnchor == nil {
             // 單位長線段,之後只改 scale/orientation,避免每幀重建 mesh
             let entity = ModelEntity(
-                mesh: .generateBox(size: [1, 0.0018, 0.0018]),
-                materials: [SimpleMaterial(color: .white.withAlphaComponent(0.7),
-                                           isMetallic: false)])
+                mesh: .generateBox(size: [1, 0.002, 0.002]),
+                materials: [UnlitMaterial(color: Self.lineColor)])
             let anchor = AnchorEntity(world: SIMD3<Float>.zero)
             anchor.addChild(entity)
             arView.scene.addAnchor(anchor)
@@ -258,7 +310,7 @@ final class TapMeasureSessionController: NSObject, ObservableObject, ARSessionDe
     }
 
     private static func makeDot() -> ModelEntity {
-        ModelEntity(mesh: .generateSphere(radius: 0.004),
-                    materials: [SimpleMaterial(color: .white, isMetallic: false)])
+        ModelEntity(mesh: .generateSphere(radius: 0.005),
+                    materials: [UnlitMaterial(color: .white)])
     }
 }
