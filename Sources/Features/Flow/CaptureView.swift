@@ -118,11 +118,13 @@ struct CaptureView: View {
                     offsetX: bubbleOffset.width + bubbleDragDelta.width,
                     offsetY: bubbleOffset.height + bubbleDragDelta.height,
                     width: width, height: height, margin: 44)
+                // 手勢必須掛在氣泡「本體」上、再做 position——
+                // 掛在 position 之後等於掛在整個定位容器,點擊判定會失效(實機驗證過)
                 lengthBubble(cm: cm, final: isFinal)
-                    .position(x: pos.x, y: pos.y)
-                    .allowsHitTesting(isFinal)   // 量測完成後才可拖曳
-                    .gesture(
-                        DragGesture()
+                    .padding(14)                    // 透明外距,加大觸控範圍
+                    .contentShape(Rectangle())
+                    .highPriorityGesture(
+                        DragGesture(minimumDistance: 0)
                             .updating($bubbleDragDelta) { value, state, _ in
                                 state = value.translation
                             }
@@ -131,6 +133,8 @@ struct CaptureView: View {
                                 bubbleOffset.height += value.translation.height
                             },
                         including: isFinal ? .all : .none)
+                    .position(x: pos.x, y: pos.y)
+                    .allowsHitTesting(isFinal)   // 量測完成後才可拖曳
             }
 
             if flash {
