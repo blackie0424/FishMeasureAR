@@ -51,6 +51,17 @@ final class PixelScaleMeasurementTests: XCTestCase {
         XCTAssertEqual(adjusted, 40.0, accuracy: 1e-9)
     }
 
+    func testPixelLengthForRealWorldCM() {
+        // 疊圖用:cm/px = 0.05 時,26cm 的藍白拖 → 520px
+        XCTAssertEqual(PixelScaleMeasurement.pixelLength(forCM: 26, cmPerPixel: 0.05)!,
+                       520, accuracy: 1e-9)
+    }
+
+    func testPixelLengthGuardsInvalidInput() {
+        XCTAssertNil(PixelScaleMeasurement.pixelLength(forCM: 26, cmPerPixel: 0))
+        XCTAssertNil(PixelScaleMeasurement.pixelLength(forCM: 0, cmPerPixel: 0.05))
+    }
+
     func testCMPerPixelWithDegenerateLineReturnsNil() {
         XCTAssertNil(PixelScaleMeasurement.cmPerPixel(
             lengthCM: 45,

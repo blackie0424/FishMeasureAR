@@ -21,6 +21,17 @@ final class ScaleReferenceTests: XCTestCase {
         XCTAssertEqual(ids.count, Set(ids).count)
     }
 
+    func testOverlayImageAvailability() {
+        // 打火機/藍白拖有去背疊圖素材;其餘尚無
+        func imageName(_ id: String) -> String? {
+            ScaleReference.catalog.first { $0.id == id }?.imageName
+        }
+        XCTAssertEqual(imageName("lighter"), "ref-lighter")
+        XCTAssertEqual(imageName("slipper"), "ref-slipper")
+        XCTAssertNil(imageName("none"))
+        XCTAssertNil(imageName("ruler30"))
+    }
+
     func testCatalogMatchesARReferenceObjectSizes() {
         // 與 AR 參照物(ReferenceObjects.swift)同一套真實尺寸,單一事實來源
         func length(_ id: String) -> Double? {
