@@ -52,6 +52,9 @@ final class TapMeasureSessionController: NSObject, ObservableObject, ARSessionDe
         }
         let view = ARView(frame: .zero)
         view.renderOptions.insert(.disableMotionBlur)
+        // 所有互動都在 SwiftUI 疊層(氣泡拖曳/按鈕);ARView 本身不收觸控,
+        // 否則 UIKit 點擊判定讓它優先吃掉手勢,疊在上面的 SwiftUI 拖曳收不到
+        view.isUserInteractionEnabled = false
         arView = view
         view.session.delegate = self
         view.session.run(configuration(),
