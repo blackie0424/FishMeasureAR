@@ -15,6 +15,8 @@ final class CatchRecord {
     var placeName: String?
     var isLocationFuzzed: Bool
     var photoLocalID: String
+    /// 整組照片(依序:原圖/測量版/比例物版);舊資料為空陣列
+    var photoLocalIDs: [String]
     var speciesName: String?
     var fishingMethod: String?       // 岸釣/船釣/磯釣/刺網/一支釣
     var note: String?
@@ -44,6 +46,7 @@ final class CatchRecord {
         self.placeName = placeName
         self.isLocationFuzzed = isLocationFuzzed
         self.photoLocalID = photoLocalID
+        self.photoLocalIDs = []
         self.speciesName = species
         self.fishingMethod = fishingMethod
         self.note = nil
@@ -53,6 +56,11 @@ final class CatchRecord {
 }
 
 extension CatchRecord {
+    /// 詳情頁瀏覽用:整組照片,舊紀錄退回單張
+    var allPhotoIDs: [String] {
+        photoLocalIDs.isEmpty ? [photoLocalID] : photoLocalIDs
+    }
+
     var lengthLabel: String {
         lengthCM.map { String(format: "%.1f cm", $0) } ?? "未量測"
     }

@@ -328,7 +328,7 @@ final class MeasureFlowCoordinator: ObservableObject {
 
         do {
             logger.info("saveRecord: saving photo set")
-            let localID = try await captureService.saveCatchPhotos(
+            let saveResult = try await captureService.saveCatchPhotos(
                 original: original,
                 measured: measuredPhoto,
                 reference: referencePhoto,
@@ -342,8 +342,9 @@ final class MeasureFlowCoordinator: ObservableObject {
                 location: storedLocation,
                 placeName: shot.placeName,
                 isLocationFuzzed: fuzz,
-                photoLocalID: localID,
+                photoLocalID: saveResult.primaryID,
                 referenceObjectsUsed: usedReference)
+            record.photoLocalIDs = saveResult.allIDs
             let trimmedNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
             record.note = trimmedNote.isEmpty ? nil : trimmedNote
             context.insert(record)
