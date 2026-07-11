@@ -31,6 +31,7 @@ targets:
           UIColorName: LaunchBackground
         UIRequiredDeviceCapabilities: [arkit]
         NSCameraUsageDescription: 需要相機進行 AR 魚長測量與拍攝。
+        NSMicrophoneUsageDescription: 錄製魚種的聲音,附加於漁獲紀錄。
         NSLocationWhenInUseUsageDescription: 記錄漁獲的釣點位置。可在設定中啟用釣點隱私模式,或拒絕授權仍可使用測量功能。
         NSPhotoLibraryAddUsageDescription: 將測量完成的漁獲照片儲存到你的相簿。
         NSPhotoLibraryUsageDescription: 建立「FishMeasureAR」相簿集中儲存漁獲照片,並讀取縮圖顯示於日誌與統計。

@@ -22,6 +22,8 @@
 	<string>1</string>
 	<key>NSCameraUsageDescription</key>
 	<string>需要相機進行 AR 魚長測量與拍攝。</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>錄製魚種的聲音,附加於漁獲紀錄。</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>記錄漁獲的釣點位置。可在設定中啟用釣點隱私模式,或拒絕授權仍可使用測量功能。</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
