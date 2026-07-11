@@ -1,8 +1,8 @@
 import Foundation
 
-/// 工作流的五個畫面(對應 UI 原型:拍照/量魚/比例尺/表單/統計)。
+/// 工作流畫面:拍照/量魚/比例尺(換算)/比例尺編輯(疊圖擺放)/表單/統計。
 public enum MeasureScreenState: Equatable, Sendable {
-    case capture, adjustFish, scale, form, stats
+    case capture, adjustFish, scale, overlayEdit, form, stats
 }
 
 /// 拍攝模式:單拍立即量測;連拍先累積、稍後批次量測。
@@ -32,13 +32,13 @@ public struct MeasureFlow: Equatable, Sendable {
     }
 
     /// - Parameter measurementReady: 快門當下量測已完成(測距儀式兩點已設定,
-    ///   照片已合成線段與長度)→ 單拍直達表單;否則進量魚畫面手動補量。
+    ///   照片已合成線段與長度)→ 單拍先進比例尺編輯;否則進量魚畫面手動補量。
     ///   連拍一律只入佇列。
     public mutating func shutterPressed(measurementReady: Bool = false) {
         switch mode {
         case .single:
             isMeasuringPending = false
-            screen = measurementReady ? .form : .adjustFish
+            screen = measurementReady ? .overlayEdit : .adjustFish
         case .burst:
             pendingShots += 1
         }
@@ -55,13 +55,23 @@ public struct MeasureFlow: Equatable, Sendable {
     public mutating func backToCapture() { screen = .capture }
     public mutating func backToAdjustFish() { screen = .adjustFish }
 
-    /// 量魚完成:已有公制長度(AR/LiDAR)可跳過比例尺步驟。
+    /// 量魚完成:已有公制長度可跳過比例尺換算,直接進疊圖編輯。
     public mutating func advanceFromAdjustFish(hasMetricLength: Bool) {
-        screen = hasMetricLength ? .form : .scale
+        screen = hasMetricLength ? .overlayEdit : .scale
     }
 
     public mutating func advanceFromScale() {
+        screen = .overlayEdit
+    }
+
+    /// 比例尺編輯(疊圖擺放)結束 → 資料填寫。
+    public mutating func advanceFromOverlayEdit() {
         screen = .form
+    }
+
+    /// 比例尺編輯往回:測距儀路徑回拍照(重拍),手動路徑回比例尺換算。
+    public mutating func backFromOverlayEdit(hasMetricLength: Bool) {
+        screen = hasMetricLength ? .capture : .scale
     }
 
     /// 從統計頁開始批次量測連拍佇列。

@@ -20,9 +20,6 @@ struct FormView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     speciesSection
                     methodSection
-                    if coordinator.shotCMPerPixel != nil {
-                        overlaySection
-                    }
                     autoInfoLine
                     Spacer(minLength: 0)
                     bottomBar
@@ -50,7 +47,7 @@ struct FormView: View {
         .disabled(coordinator.isSaving)
     }
 
-    // MARK: 照片(所見即所得;scaledToFit 才能精準擺放參照物疊圖)
+    // MARK: 照片(scaledToFit;含前一步擺好的參照物疊圖,純顯示)
 
     private func photoHeader(height: CGFloat) -> some View {
         GeometryReader { geo in
@@ -63,7 +60,7 @@ struct FormView: View {
                         .scaledToFit()
                         .frame(width: geo.size.width, height: geo.size.height)
 
-                    referenceOverlay(shot: shot, container: geo.size)
+                    placedOverlayPreview(shot: shot, container: geo.size)
                 }
 
                 Button("‹ 重新量測") { coordinator.backToAdjustFish() }
@@ -92,16 +89,15 @@ struct FormView: View {
                     }
                 }
             }
-            .coordinateSpace(name: Self.photoSpaceName)
         }
         .frame(height: height)
         .clipped()
     }
 
-    /// 參照物疊圖:去背圖按實際 cm/px 等比縮放,拖曳擺放(存檔同位置合成)
+    /// 前一步(比例尺編輯)擺放的疊圖,純顯示不可拖
     @ViewBuilder
-    private func referenceOverlay(shot: MeasureFlowCoordinator.Shot,
-                                  container: CGSize) -> some View {
+    private func placedOverlayPreview(shot: MeasureFlowCoordinator.Shot,
+                                      container: CGSize) -> some View {
         if let overlay = coordinator.overlayImage,
            let center = coordinator.overlayCenter,
            let longSidePx = coordinator.overlayLongSidePx {
@@ -111,29 +107,16 @@ struct FormView: View {
             let fitScale = imageSize.width > 0 ? fitRect.width / imageSize.width : 0
             let scale = CGFloat(longSidePx) * fitScale
                 / max(overlay.size.width, overlay.size.height)
-            let viewPos = ImageFitGeometry.viewPoint(fromImage: center,
-                                                     imageSize: imageSize,
-                                                     container: container)
-            // 手勢掛本體+named space(教訓:掛在 .position 之後會收不到觸控)
             Image(uiImage: overlay)
                 .resizable()
                 .frame(width: overlay.size.width * scale,
                        height: overlay.size.height * scale)
-                .contentShape(Rectangle())
-                .gesture(
-                    DragGesture(minimumDistance: 0,
-                                coordinateSpace: .named(Self.photoSpaceName))
-                        .onChanged { value in
-                            coordinator.overlayCenter = ImageFitGeometry.imagePoint(
-                                fromView: value.location,
-                                imageSize: imageSize, container: container)
-                        }
-                )
-                .position(viewPos)
+                .position(ImageFitGeometry.viewPoint(fromImage: center,
+                                                     imageSize: imageSize,
+                                                     container: container))
+                .allowsHitTesting(false)
         }
     }
-
-    private static let photoSpaceName = "formPhotoSpace"
 
     // MARK: 魚種(必填)
 
@@ -171,29 +154,6 @@ struct FormView: View {
                                    accent: .cyan) {
                             coordinator.selectMethod(name)
                         }
-                    }
-                }
-            }
-        }
-    }
-
-    // MARK: 比例尺物件(疊在照片上,可拖移;依實際尺寸等比合成)
-
-    private var overlaySection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("比例尺物件(拖到照片上擺放)")
-                .font(.subheadline.bold()).foregroundStyle(.white.opacity(0.85))
-            HStack(spacing: 8) {
-                ChipButton(label: "無",
-                           isSelected: coordinator.overlayReference == nil,
-                           accent: .orange) {
-                    coordinator.selectOverlay(nil)
-                }
-                ForEach(ScaleReference.overlayCatalog) { ref in
-                    ChipButton(label: ref.name,
-                               isSelected: coordinator.overlayReference?.id == ref.id,
-                               accent: .orange) {
-                        coordinator.selectOverlay(ref)
                     }
                 }
             }
