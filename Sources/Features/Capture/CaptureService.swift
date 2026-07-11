@@ -23,6 +23,14 @@ struct PhotoSaveOptions: Sendable {
     let gpsLocation: CLLocation?
 }
 
+/// 一組漁獲照片的儲存結果
+struct PhotoSaveResult {
+    /// 縮圖用主照片(測量版優先)
+    let primaryID: String
+    /// 依序:原圖、測量版、比例物版(存在者)
+    let allIDs: [String]
+}
+
 /// 拍攝服務:AR 快照、浮水印合成 → 寫入 EXIF GPS → 存入相簿
 final class CaptureService {
 
@@ -47,13 +55,13 @@ final class CaptureService {
     /// 1. 原圖(乾淨無合成,只帶 EXIF)
     /// 2. 含測量線與長度(套浮水印設定)
     /// 3. 原圖+比例物疊圖(套浮水印設定;未選比例物則略過)
-    /// 回傳「量測版」的 PHAsset localIdentifier(無量測版則為原圖),
-    /// 供日誌/統計縮圖使用。
+    /// 回傳整組 localIdentifier(依序:原圖/測量版/比例物版),
+    /// primaryID 為量測版(無則原圖),供日誌/統計縮圖使用。
     /// 授權對話框等待不設限;寫入相簿本身 20 秒逾時,不讓 UI 永久卡死。
     func saveCatchPhotos(original: UIImage,
                          measured: UIImage?,
                          reference: UIImage?,
-                         options: PhotoSaveOptions) async throws -> String {
+                         options: PhotoSaveOptions) async throws -> PhotoSaveResult {
 
         logger.info("save: start (original + measured=\(measured != nil) + reference=\(reference != nil))")
 
@@ -96,11 +104,11 @@ final class CaptureService {
         let itemsToWrite = items
         let targetAlbum = album
         let idx = primaryIndex
-        let localID = try await withTimeout(seconds: 20) {
+        let result = try await withTimeout(seconds: 20) {
             try await Self.writeSet(itemsToWrite, primaryIndex: idx, album: targetAlbum)
         }
-        logger.info("save: done, \(items.count) photos, primary=\(localID)")
-        return localID
+        logger.info("save: done, \(result.allIDs.count) photos, primary=\(result.primaryID)")
+        return result
     }
 
     /// 找到或建立專屬相簿(需 readWrite 完整授權)
@@ -127,11 +135,12 @@ final class CaptureService {
             withLocalIdentifiers: [placeholderID], options: nil).firstObject
     }
 
-    /// 單一交易寫入整組照片並加入相簿;回傳主照片(縮圖用)的 localIdentifier
+    /// 單一交易寫入整組照片並加入相簿;回傳整組 localIdentifier
     private static func writeSet(_ items: [Data],
                                  primaryIndex: Int,
-                                 album: PHAssetCollection?) async throws -> String {
+                                 album: PHAssetCollection?) async throws -> PhotoSaveResult {
         var primaryID = ""
+        var allIDs: [String] = []
         try await PHPhotoLibrary.shared().performChanges {
             var placeholders: [PHObjectPlaceholder] = []
             for data in items {
@@ -141,6 +150,7 @@ final class CaptureService {
                     placeholders.append(placeholder)
                 }
             }
+            allIDs = placeholders.map(\.localIdentifier)
             if placeholders.indices.contains(primaryIndex) {
                 primaryID = placeholders[primaryIndex].localIdentifier
             }
@@ -150,7 +160,7 @@ final class CaptureService {
             }
         }
         guard !primaryID.isEmpty else { throw CaptureError.encodeFailed }
-        return primaryID
+        return PhotoSaveResult(primaryID: primaryID, allIDs: allIDs)
     }
 
     /// 先到先贏的逾時:不能用 TaskGroup——group 會等所有子任務結束,

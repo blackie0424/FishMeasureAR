@@ -80,10 +80,18 @@ struct CatchDetailView: View {
     var body: some View {
         Form {
             Section {
-                PhotoThumbnail(localID: record.photoLocalID, targetSize: CGSize(width: 800, height: 800))
-                    .frame(maxWidth: .infinity, minHeight: 260)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .listRowInsets(EdgeInsets())
+                // 整組照片(原圖/測量版/比例物版)左右滑動瀏覽
+                TabView {
+                    ForEach(record.allPhotoIDs, id: \.self) { id in
+                        PhotoThumbnail(localID: id,
+                                       targetSize: CGSize(width: 800, height: 800))
+                            .clipped()
+                    }
+                }
+                .tabViewStyle(.page(indexDisplayMode: .always))
+                .indexViewStyle(.page(backgroundDisplayMode: .always))
+                .frame(height: 300)
+                .listRowInsets(EdgeInsets())
             }
             Section("測量") {
                 LabeledContent("魚長", value: record.lengthLabel)
