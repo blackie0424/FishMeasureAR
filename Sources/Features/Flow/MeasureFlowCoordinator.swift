@@ -279,22 +279,25 @@ final class MeasureFlowCoordinator: ObservableObject {
         var usedReference = !hasMetricLength && selectedReference.lengthCM != nil
             ? [selectedReference.id] : []
 
-        var imageToSave = shot.image
+        // 三張一組:1. 原圖(乾淨) 2. 含測量線 3. 原圖+比例物
+        let original = shot.image
 
-        // 參照物疊圖:去背圖依實際 cm/px 等比縮放,合成在使用者擺放的位置
+        // 第三張:比例物疊圖(去背圖依 cm/px 等比,使用者擺放的位置與角度)
+        var referencePhoto: UIImage? = nil
         if let overlayImage, let center = overlayCenter,
            let longSide = overlayLongSidePx {
-            imageToSave = ImageAnnotator.drawOverlay(
+            referencePhoto = ImageAnnotator.drawOverlay(
                 overlayImage,
                 centeredAt: CGPoint(x: center.x, y: center.y),
                 longSidePx: longSide,
                 rotationDegrees: overlayRotationDegrees,
-                on: imageToSave)
+                on: original)
             if let id = overlayReference?.id { usedReference.append(id) }
         }
 
-        // 照片存檔前才合成線+端點+標籤(以確認頁最終端點為準,不受 AR 飄移影響)
-        if !shot.labelComposited, let length {
+        // 第二張:測量線+端點+標籤(以確認頁最終端點為準,不受 AR 飄移影響)
+        var measuredPhoto: UIImage? = nil
+        if let length {
             let size = shot.image.size
             // 拍攝時拖過氣泡 → 沿用該偏移;否則用線法線方向的預設擺位
             let labelPos: PlanePoint
@@ -311,19 +314,22 @@ final class MeasureFlowCoordinator: ObservableObject {
                     offset: Double(size.width) * 0.06,
                     width: Double(size.width), height: Double(size.height))
             }
-            imageToSave = ImageAnnotator.drawMeasurement(
+            measuredPhoto = ImageAnnotator.drawMeasurement(
                 from: CGPoint(x: shot.fishA.x, y: shot.fishA.y),
                 to: CGPoint(x: shot.fishB.x, y: shot.fishB.y),
                 label: String(format: "%.1f cm", length),
                 labelAt: CGPoint(x: labelPos.x, y: labelPos.y),
                 rotationDegrees: settings.bubbleRotationDegrees,
-                on: imageToSave)
+                on: original)
         }
 
         do {
-            logger.info("saveRecord: saving photo")
-            let localID = try await captureService.save(image: imageToSave,
-                                                        options: saveOptions)
+            logger.info("saveRecord: saving photo set")
+            let localID = try await captureService.saveCatchPhotos(
+                original: original,
+                measured: measuredPhoto,
+                reference: referencePhoto,
+                options: saveOptions)
             logger.info("saveRecord: inserting record")
             let record = CatchRecord(
                 lengthCM: length,
@@ -346,7 +352,9 @@ final class MeasureFlowCoordinator: ObservableObject {
             clearOverlay()
             tapController.reset()   // 下一尾從乾淨的點位開始
             logger.info("saveRecord: done")
-            showToast("已儲存至本機 · 有網路時自動同步")
+            let count = 1 + (measuredPhoto != nil ? 1 : 0)
+                          + (referencePhoto != nil ? 1 : 0)
+            showToast("已存 \(count) 張到相簿「FishMeasureAR」")
         } catch CaptureError.photoLibraryDenied {
             logger.error("saveRecord: photo library denied")
             showToast("沒有相簿權限:請到「設定 > FishMeasureAR」開啟照片權限")

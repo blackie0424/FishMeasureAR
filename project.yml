@@ -33,6 +33,6 @@ targets:
         NSCameraUsageDescription: 需要相機進行 AR 魚長測量與拍攝。
         NSLocationWhenInUseUsageDescription: 記錄漁獲的釣點位置。可在設定中啟用釣點隱私模式,或拒絕授權仍可使用測量功能。
         NSPhotoLibraryAddUsageDescription: 將測量完成的漁獲照片儲存到你的相簿。
-        NSPhotoLibraryUsageDescription: 讀取已儲存的漁獲照片,在日誌與統計清單顯示縮圖。
+        NSPhotoLibraryUsageDescription: 建立「FishMeasureAR」相簿集中儲存漁獲照片,並讀取縮圖顯示於日誌與統計。
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         CADisableMinimumFrameDurationOnPhone: true
