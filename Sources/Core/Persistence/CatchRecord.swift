@@ -6,6 +6,9 @@ import Foundation
 final class CatchRecord {
     var id: UUID
     var createdAt: Date
+    /// ⚠ Schema 守則:新增「非 optional」屬性必須在宣告層帶預設值(= xxx),
+    /// 否則 SwiftData 對既有資料庫遷移失敗 → store 重建 → 使用者資料全失
+    /// (2026-07-11 photoLocalIDs 未帶預設值造成日誌清空的教訓)。
     /// 未量測(連拍待量或無比例尺)時為 nil
     var lengthCM: Double?
     var measureMethod: String        // "auto-lidar" | "auto-plane" | "manual-scale"
@@ -16,13 +19,13 @@ final class CatchRecord {
     var isLocationFuzzed: Bool
     var photoLocalID: String
     /// 整組照片(依序:原圖/測量版/比例物版);舊資料為空陣列
-    var photoLocalIDs: [String]
+    var photoLocalIDs: [String] = []
     var speciesName: String?
     var fishingMethod: String?       // 岸釣/船釣/磯釣/刺網/一支釣
     var note: String?
-    var referenceObjectsUsed: [String]
+    var referenceObjectsUsed: [String] = []
     /// 之後上傳調查平台用;目前一律 false(⟳ 待傳)
-    var isSynced: Bool
+    var isSynced: Bool = false
 
     /// - Parameters:
     ///   - location: 欲儲存的座標。隱私模式的模糊化由呼叫端先行處理,
