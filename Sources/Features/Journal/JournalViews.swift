@@ -63,7 +63,7 @@ struct CatchRow: View {
                     .font(.headline)
                 Text(record.createdAt, style: .date)
                     .font(.caption).foregroundStyle(.secondary)
-                if let place = record.placeName {
+                if let place = record.displayPlace {
                     Label(place, systemImage: "mappin")
                         .font(.caption).foregroundStyle(.secondary)
                 }
@@ -102,7 +102,7 @@ struct CatchDetailView: View {
                 LabeledContent("時間", value: record.createdAt.formatted())
             }
             Section("釣點") {
-                if let place = record.placeName {
+                if let place = record.displayPlace {
                     LabeledContent("地點", value: place)
                 }
                 if let lat = record.latitude, let lon = record.longitude {
@@ -118,6 +118,8 @@ struct CatchDetailView: View {
                 PresetOrCustomField(title: "漁法",
                                     options: FormView.methodOptions,
                                     value: $record.fishingMethod)
+                TextField("實際地點(如:開元港)",
+                          text: Binding($record.placeNote, default: ""))
                 TextField("備註", text: Binding($record.note, default: ""), axis: .vertical)
             }
         }
