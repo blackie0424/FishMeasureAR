@@ -133,16 +133,6 @@ struct OverlayEditView: View {
                         coordinator.selectOverlay(ref)
                     }
                 }
-                Spacer()
-                Button {
-                    coordinator.advanceFromOverlayEdit()
-                } label: {
-                    Text("下一步 ›")
-                        .font(.subheadline.bold())
-                        .padding(.horizontal, 22).padding(.vertical, 12)
-                        .background(Color.cyan, in: RoundedRectangle(cornerRadius: 12))
-                        .foregroundStyle(.black)
-                }
                 if coordinator.overlayReference != nil {
                     Button {
                         let next = MeasureAnnotationLayout.nextRotation(
@@ -156,6 +146,16 @@ struct OverlayEditView: View {
                             .background(Color.white.opacity(0.12), in: Circle())
                             .foregroundStyle(.white.opacity(0.85))
                     }
+                }
+                Spacer()
+                Button {
+                    coordinator.advanceFromOverlayEdit()
+                } label: {
+                    Text("下一步 ›")
+                        .font(.subheadline.bold())
+                        .padding(.horizontal, 22).padding(.vertical, 12)
+                        .background(Color.cyan, in: RoundedRectangle(cornerRadius: 12))
+                        .foregroundStyle(.black)
                 }
             }
         }
