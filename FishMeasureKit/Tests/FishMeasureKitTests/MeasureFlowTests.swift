@@ -27,11 +27,34 @@ final class MeasureFlowTests: XCTestCase {
         XCTAssertEqual(flow.pendingShots, 0)
     }
 
-    func testShutterWithCompletedMeasurementGoesStraightToForm() {
-        // 測距儀式兩點已設定 → 照片已含線段與長度,直達表單
+    func testShutterWithCompletedMeasurementGoesToOverlayEdit() {
+        // 測距儀式兩點已設定 → 先進比例尺編輯,結束才到表單
         var flow = MeasureFlow()
         flow.shutterPressed(measurementReady: true)
+        XCTAssertEqual(flow.screen, .overlayEdit)
+    }
+
+    func testOverlayEditAdvancesToForm() {
+        var flow = MeasureFlow()
+        flow.shutterPressed(measurementReady: true)
+        flow.advanceFromOverlayEdit()
         XCTAssertEqual(flow.screen, .form)
+    }
+
+    func testOverlayEditBackForMetricPathReturnsToCapture() {
+        var flow = MeasureFlow()
+        flow.shutterPressed(measurementReady: true)
+        flow.backFromOverlayEdit(hasMetricLength: true)
+        XCTAssertEqual(flow.screen, .capture)
+    }
+
+    func testOverlayEditBackForManualPathReturnsToScale() {
+        var flow = MeasureFlow()
+        flow.shutterPressed()
+        flow.advanceFromAdjustFish(hasMetricLength: false)
+        flow.advanceFromScale()
+        flow.backFromOverlayEdit(hasMetricLength: false)
+        XCTAssertEqual(flow.screen, .scale)
     }
 
     func testBurstShutterIgnoresMeasurementReady() {
@@ -76,7 +99,7 @@ final class MeasureFlowTests: XCTestCase {
         var flow = MeasureFlow()
         flow.shutterPressed()
         flow.advanceFromAdjustFish(hasMetricLength: true)
-        XCTAssertEqual(flow.screen, .form)
+        XCTAssertEqual(flow.screen, .overlayEdit)
     }
 
     func testScaleStepAdvancesToForm() {
@@ -84,7 +107,7 @@ final class MeasureFlowTests: XCTestCase {
         flow.shutterPressed()
         flow.advanceFromAdjustFish(hasMetricLength: false)
         flow.advanceFromScale()
-        XCTAssertEqual(flow.screen, .form)
+        XCTAssertEqual(flow.screen, .overlayEdit)
     }
 
     func testBackNavigation() {
@@ -103,6 +126,7 @@ final class MeasureFlowTests: XCTestCase {
         var flow = MeasureFlow()
         flow.shutterPressed()
         flow.advanceFromAdjustFish(hasMetricLength: true)
+        flow.advanceFromOverlayEdit()
         let saved = flow.save(to: .captureNext)
         XCTAssertFalse(saved)
         XCTAssertTrue(flow.speciesValidationFailed)
@@ -113,6 +137,7 @@ final class MeasureFlowTests: XCTestCase {
         var flow = MeasureFlow()
         flow.shutterPressed()
         flow.advanceFromAdjustFish(hasMetricLength: true)
+        flow.advanceFromOverlayEdit()
         _ = flow.save(to: .captureNext)
         flow.selectSpecies("吳郭魚")
         XCTAssertFalse(flow.speciesValidationFailed)
@@ -123,6 +148,7 @@ final class MeasureFlowTests: XCTestCase {
         var flow = MeasureFlow()
         flow.shutterPressed()
         flow.advanceFromAdjustFish(hasMetricLength: true)
+        flow.advanceFromOverlayEdit()
         flow.selectSpecies("白帶魚")
         flow.selectMethod("船釣")
         let saved = flow.save(to: .captureNext)
@@ -136,6 +162,7 @@ final class MeasureFlowTests: XCTestCase {
         var flow = MeasureFlow()
         flow.shutterPressed()
         flow.advanceFromAdjustFish(hasMetricLength: true)
+        flow.advanceFromOverlayEdit()
         flow.selectSpecies("午仔")
         XCTAssertTrue(flow.save(to: .stats))
         XCTAssertEqual(flow.screen, .stats)
@@ -172,6 +199,7 @@ final class MeasureFlowTests: XCTestCase {
         flow.startMeasuringPending()
         flow.advanceFromAdjustFish(hasMetricLength: false)
         flow.advanceFromScale()
+        flow.advanceFromOverlayEdit()
         flow.selectSpecies("花身仔")
         XCTAssertTrue(flow.save(to: .stats))
         XCTAssertEqual(flow.pendingShots, 1)
@@ -185,6 +213,7 @@ final class MeasureFlowTests: XCTestCase {
         flow.setMode(.single)
         flow.shutterPressed()   // 一般單拍
         flow.advanceFromAdjustFish(hasMetricLength: true)
+        flow.advanceFromOverlayEdit()
         flow.selectSpecies("黑鯛")
         XCTAssertTrue(flow.save(to: .stats))
         XCTAssertEqual(flow.pendingShots, 1)
