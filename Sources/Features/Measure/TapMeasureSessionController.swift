@@ -77,6 +77,15 @@ final class TapMeasureSessionController: NSObject, ObservableObject, ARSessionDe
         arView?.session.pause()
     }
 
+    /// 回到拍攝畫面時恢復 session(不重置世界地圖)。
+    /// TabView 會保留 view 不重建,切回分頁時 makeUIView 不會再被呼叫,
+    /// 只靠它恢復的話 session 停在 paused → 畫面凍結像當機。
+    func resume() {
+        guard let arView else { return }
+        logger.info("ARSession resume (onAppear)")
+        arView.session.run(configuration())
+    }
+
     nonisolated func session(_ session: ARSession, didUpdate frame: ARFrame) {
         // 每 3 幀更新一次(~20Hz)就足夠順暢
         let n = frameGate.withLock { count -> Int in

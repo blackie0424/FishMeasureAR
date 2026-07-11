@@ -56,7 +56,10 @@ struct CaptureView: View {
                    alignment: .top)
         }
         .background(Color.black.ignoresSafeArea())
-        .onAppear { coordinator.locationService.requestAuthorization() }
+        .onAppear {
+            coordinator.locationService.requestAuthorization()
+            controller.resume()   // 切分頁回來時 view 不重建,需明確恢復 session
+        }
         .onDisappear { controller.pause() }
     }
 
