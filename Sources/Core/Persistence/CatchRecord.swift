@@ -13,6 +13,8 @@ final class CatchRecord {
     var longitude: Double?
     var horizontalAccuracy: Double?
     var placeName: String?
+    /// 使用者填寫的實際地點(如「開元港」);自動反向地理編碼只到鄉鎮層級
+    var placeNote: String? = nil
     var isLocationFuzzed: Bool
     var photoLocalID: String
     /// 整組照片(依序:原圖/測量版/比例物版);舊資料為空陣列
@@ -59,6 +61,11 @@ extension CatchRecord {
     /// 詳情頁瀏覽用:整組照片,舊紀錄退回單張
     var allPhotoIDs: [String] {
         photoLocalIDs.isEmpty ? [photoLocalID] : photoLocalIDs
+    }
+
+    /// 顯示用地點:使用者填寫優先,退回自動地理編碼
+    var displayPlace: String? {
+        placeNote ?? placeName
     }
 
     var lengthLabel: String {

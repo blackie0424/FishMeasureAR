@@ -20,6 +20,7 @@ struct FormView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     speciesSection
                     methodSection
+                    placeNoteSection
                     noteSection
                     autoInfoLine
                     Spacer(minLength: 0)
@@ -160,6 +161,17 @@ struct FormView: View {
                 }
             }
         }
+    }
+
+    // MARK: 地點備註(選填,實際地點如「開元港」)
+
+    private var placeNoteSection: some View {
+        TextField("實際地點(選填,如:開元港)", text: $coordinator.placeNote)
+            .font(.footnote)
+            .foregroundStyle(.white)
+            .padding(.horizontal, 12).padding(.vertical, 9)
+            .background(Color.white.opacity(0.06),
+                        in: RoundedRectangle(cornerRadius: 10))
     }
 
     // MARK: 備註(選填)
