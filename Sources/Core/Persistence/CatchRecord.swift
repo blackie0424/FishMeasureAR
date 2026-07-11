@@ -25,6 +25,8 @@ final class CatchRecord {
     var speciesName: String?
     var fishingMethod: String?       // 岸釣/船釣/磯釣/刺網/一支釣
     var note: String?
+    /// 魚聲錄音檔名(App Documents 下;nil = 未錄)
+    var audioFileName: String? = nil
     var referenceObjectsUsed: [String] = []
     /// 之後上傳調查平台用;目前一律 false(⟳ 待傳)
     var isSynced: Bool = false

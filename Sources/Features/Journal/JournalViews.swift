@@ -111,6 +111,9 @@ struct CatchDetailView: View {
                                    + (record.isLocationFuzzed ? "(已模糊化)" : ""))
                 }
             }
+            Section("魚聲錄音") {
+                AudioNoteSection(record: record)
+            }
             Section("編輯") {
                 PresetOrCustomField(title: "魚種",
                                     options: FormView.speciesOptions,
@@ -125,6 +128,68 @@ struct CatchDetailView: View {
         }
         .navigationTitle("漁獲詳情")
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+/// 魚聲錄音列:錄音/停止/播放/刪除(檔名綁定紀錄 id)
+struct AudioNoteSection: View {
+    @Bindable var record: CatchRecord
+    @StateObject private var audio = AudioNoteRecorder()
+    @State private var permissionDenied = false
+
+    private var fileName: String { "audio-\(record.id.uuidString).m4a" }
+
+    var body: some View {
+        HStack(spacing: 16) {
+            if audio.isRecording {
+                Button {
+                    audio.stopRecording()
+                    record.audioFileName = fileName
+                } label: {
+                    Label("停止錄音", systemImage: "stop.circle.fill")
+                        .foregroundStyle(.red)
+                }
+            } else {
+                Button {
+                    Task {
+                        permissionDenied = false
+                        if await audio.startRecording(fileName: fileName) == false {
+                            permissionDenied = true
+                        }
+                    }
+                } label: {
+                    Label(record.audioFileName == nil ? "錄音" : "重錄",
+                          systemImage: "mic.fill")
+                }
+            }
+
+            Spacer()
+
+            if let name = record.audioFileName, !audio.isRecording {
+                Button {
+                    audio.isPlaying ? audio.stopPlayback() : audio.play(fileName: name)
+                } label: {
+                    Label(audio.isPlaying ? "停止" : "播放",
+                          systemImage: audio.isPlaying ? "stop.fill" : "play.fill")
+                }
+                Button(role: .destructive) {
+                    audio.deleteFile(named: name)
+                    record.audioFileName = nil
+                } label: {
+                    Image(systemName: "trash")
+                }
+            }
+        }
+        .buttonStyle(.borderless)   // Form 列內多按鈕各自獨立觸發
+
+        if audio.isRecording {
+            Label("錄音中…再按停止", systemImage: "waveform")
+                .font(.caption).foregroundStyle(.red)
+        }
+        if permissionDenied {
+            Text("沒有麥克風權限:請到「設定 > FishMeasureAR」開啟")
+                .font(.caption).foregroundStyle(.orange)
+        }
     }
 }
 
