@@ -40,21 +40,36 @@ enum ImageAnnotator {
         let withLine = renderer.image { _ in
             image.draw(at: .zero)
 
-            let lineWidth = max(image.size.width * 0.004, 2)
+            // 亮青色主線(與 AR 畫面同色)+ 較粗深色底線,任何背景都清楚
+            let lineWidth = max(image.size.width * 0.008, 4)
+            let cyan = UIColor(red: 0.21, green: 0.77, blue: 0.94, alpha: 1)
+
+            let underPath = UIBezierPath()
+            underPath.move(to: p1)
+            underPath.addLine(to: p2)
+            underPath.lineWidth = lineWidth * 1.7
+            underPath.lineCapStyle = .round
+            UIColor.black.withAlphaComponent(0.55).setStroke()
+            underPath.stroke()
+
             let path = UIBezierPath()
             path.move(to: p1)
             path.addLine(to: p2)
             path.lineWidth = lineWidth
             path.lineCapStyle = .round
-            UIColor.white.setStroke()
+            cyan.setStroke()
             path.stroke()
 
-            let r = lineWidth * 2.2
+            // 端點:白心圓 + 青色外框(同確認頁樣式)
+            let r = lineWidth * 1.8
             for p in [p1, p2] {
                 let dot = UIBezierPath(ovalIn: CGRect(x: p.x - r, y: p.y - r,
                                                       width: r * 2, height: r * 2))
                 UIColor.white.setFill()
                 dot.fill()
+                dot.lineWidth = lineWidth * 0.6
+                cyan.setStroke()
+                dot.stroke()
             }
         }
         return drawLengthLabel(label, at: labelPoint,
