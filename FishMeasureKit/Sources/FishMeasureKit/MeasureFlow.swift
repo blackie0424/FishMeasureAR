@@ -31,14 +31,13 @@ public struct MeasureFlow: Equatable, Sendable {
         mode = newMode
     }
 
-    /// - Parameter measurementReady: 快門當下量測已完成(測距儀式兩點已設定,
-    ///   照片已合成線段與長度)→ 單拍先進比例尺編輯;否則進量魚畫面手動補量。
-    ///   連拍一律只入佇列。
-    public mutating func shutterPressed(measurementReady: Bool = false) {
+    /// 單拍:一律先進「確認測量線」——AR 錨點在改構圖時可能飄移,
+    /// 在凍結的照片上確認/微調端點才可靠。連拍只入佇列。
+    public mutating func shutterPressed() {
         switch mode {
         case .single:
             isMeasuringPending = false
-            screen = measurementReady ? .overlayEdit : .adjustFish
+            screen = .adjustFish
         case .burst:
             pendingShots += 1
         }
@@ -69,9 +68,9 @@ public struct MeasureFlow: Equatable, Sendable {
         screen = .form
     }
 
-    /// 比例尺編輯往回:測距儀路徑回拍照(重拍),手動路徑回比例尺換算。
+    /// 比例尺編輯往回:測距儀路徑回「確認測量線」,手動路徑回比例尺換算。
     public mutating func backFromOverlayEdit(hasMetricLength: Bool) {
-        screen = hasMetricLength ? .capture : .scale
+        screen = hasMetricLength ? .adjustFish : .scale
     }
 
     /// 從統計頁開始批次量測連拍佇列。

@@ -52,13 +52,16 @@ final class MeasureFlowCoordinator: ObservableObject {
         var scaleA: PlanePoint
         var scaleB: PlanePoint
         let measureMethod: String
-        /// 照片是否已含量測線與長度標籤(測距儀路徑拍照時即合成)
+        /// 照片是否已含量測線與長度標籤(現行流程一律存檔時才合成 = false)
         let labelComposited: Bool
+        /// 拍攝畫面上氣泡被拖曳的偏移(影像像素);nil = 用預設擺位邏輯
+        let labelOffset: PlanePoint?
 
         init(image: UIImage, capturedAt: Date,
              location: CLLocation?, placeName: String?,
              arLengthCM: Double?, arEndpoints: (PlanePoint, PlanePoint)?,
-             measureMethod: String, labelComposited: Bool = false) {
+             measureMethod: String, labelComposited: Bool = false,
+             labelOffset: PlanePoint? = nil) {
             let w = image.size.width, h = image.size.height
             self.image = image
             self.capturedAt = capturedAt
@@ -73,6 +76,7 @@ final class MeasureFlowCoordinator: ObservableObject {
             self.scaleB = PlanePoint(x: w * 0.65, y: h * 0.75)
             self.measureMethod = measureMethod
             self.labelComposited = labelComposited
+            self.labelOffset = labelOffset
         }
     }
 
@@ -151,13 +155,12 @@ final class MeasureFlowCoordinator: ObservableObject {
 
     // MARK: 拍照(測距儀式:快照已含 3D 點與線段,再合成長度標籤)
 
-    /// - Parameters:
-    ///   - bubbleOffset: 使用者拖曳數字氣泡的偏移(view 座標),
-    ///     照片合成沿用同一偏移(換算至影像像素),所見即所得。
-    ///   - bubbleRotationDegrees: 氣泡角度(橫向拍攝時 90/270),合成同角度。
+    /// - Parameter bubbleOffset: 拍攝畫面上數字氣泡被拖曳的偏移(view 座標),
+    ///   存檔合成沿用(換算至影像像素),所見即所得。
+    /// 快照時隱藏 3D 量測實體:AR 錨點在改構圖時可能飄移,
+    /// 線與標籤改由「確認測量線」步驟在靜態照片上定位、存檔時才合成。
     func takeShot(from controller: TapMeasureSessionController,
-                  bubbleOffset: CGSize = .zero,
-                  bubbleRotationDegrees: Int = 0) {
+                  bubbleOffset: CGSize = .zero) {
         guard let arView = controller.arView else { return }
         let lengthCM = controller.lengthCM
         let endpointsInView = controller.projectedEndpoints()
@@ -165,7 +168,10 @@ final class MeasureFlowCoordinator: ObservableObject {
         let viewSize = arView.bounds.size
 
         Task { @MainActor in
-            guard let raw = try? await captureService.snapshot(from: arView) else {
+            controller.setMeasurementVisible(false)
+            let raw = try? await captureService.snapshot(from: arView)
+            controller.setMeasurementVisible(true)
+            guard let raw else {
                 showToast("拍攝失敗,請再試一次")
                 return
             }
@@ -180,36 +186,23 @@ final class MeasureFlowCoordinator: ObservableObject {
                 flow.shutterPressed()
                 controller.reset()   // 快照完成後才清點位,準備下一張
             case .single:
-                var image = raw
                 var endpointsPx: (PlanePoint, PlanePoint)? = nil
-                if let lengthCM, let (v1, v2) = endpointsInView,
+                var labelOffset: PlanePoint? = nil
+                if lengthCM != nil, let (v1, v2) = endpointsInView,
                    viewSize.width > 0, viewSize.height > 0 {
-                    let sx = image.size.width / viewSize.width
-                    let sy = image.size.height / viewSize.height
-                    let p1 = PlanePoint(x: v1.x * sx, y: v1.y * sy)
-                    let p2 = PlanePoint(x: v2.x * sx, y: v2.y * sy)
-                    endpointsPx = (p1, p2)
-                    // 與螢幕氣泡同一算式:線中點 + 使用者偏移(換算像素)
-                    let labelPos = MeasureAnnotationLayout.displayPosition(
-                        midpoint: PlanePoint(x: (p1.x + p2.x) / 2,
-                                             y: (p1.y + p2.y) / 2),
-                        offsetX: bubbleOffset.width * sx,
-                        offsetY: bubbleOffset.height * sy,
-                        width: image.size.width, height: image.size.height,
-                        margin: image.size.width * 0.06)
-                    image = ImageAnnotator.drawLengthLabel(
-                        String(format: "%.1f cm", lengthCM),
-                        at: CGPoint(x: labelPos.x, y: labelPos.y),
-                        rotationDegrees: bubbleRotationDegrees,
-                        on: raw)
+                    let sx = raw.size.width / viewSize.width
+                    let sy = raw.size.height / viewSize.height
+                    endpointsPx = (PlanePoint(x: v1.x * sx, y: v1.y * sy),
+                                   PlanePoint(x: v2.x * sx, y: v2.y * sy))
+                    labelOffset = PlanePoint(x: bubbleOffset.width * sx,
+                                             y: bubbleOffset.height * sy)
                 }
-                currentShot = Shot(image: image, capturedAt: .now,
+                currentShot = Shot(image: raw, capturedAt: .now,
                                    location: location, placeName: place,
                                    arLengthCM: lengthCM, arEndpoints: endpointsPx,
                                    measureMethod: method,
-                                   labelComposited: lengthCM != nil)
-                // 兩點已設定 → 照片已含線段與長度,直達表單
-                flow.shutterPressed(measurementReady: lengthCM != nil)
+                                   labelOffset: labelOffset)
+                flow.shutterPressed()   // → 確認測量線(靜態照片上可微調)
             }
         }
     }
@@ -240,13 +233,9 @@ final class MeasureFlowCoordinator: ObservableObject {
         flow.advanceFromOverlayEdit()
     }
 
-    /// 比例尺編輯往回:測距儀路徑=重拍(含清理),手動路徑=回比例尺換算
+    /// 比例尺編輯往回:回「確認測量線」或比例尺換算(shot 保留,不清理)
     func backFromOverlayEdit() {
-        if hasMetricLength {
-            backToCapture()
-        } else {
-            flow.backFromOverlayEdit(hasMetricLength: false)
-        }
+        flow.backFromOverlayEdit(hasMetricLength: hasMetricLength)
     }
 
     /// 統計頁「去量」:取佇列第一張開始量測(儲存成功才移出佇列)。
@@ -304,13 +293,24 @@ final class MeasureFlowCoordinator: ObservableObject {
             if let id = overlayReference?.id { usedReference.append(id) }
         }
 
-        // 量魚/比例尺路徑:照片還沒有線段,存檔前把線+端點+標籤合成進去
+        // 照片存檔前才合成線+端點+標籤(以確認頁最終端點為準,不受 AR 飄移影響)
         if !shot.labelComposited, let length {
             let size = shot.image.size
-            let labelPos = MeasureAnnotationLayout.labelPosition(
-                p1: shot.fishA, p2: shot.fishB,
-                offset: Double(size.width) * 0.06,
-                width: Double(size.width), height: Double(size.height))
+            // 拍攝時拖過氣泡 → 沿用該偏移;否則用線法線方向的預設擺位
+            let labelPos: PlanePoint
+            if let offset = shot.labelOffset {
+                labelPos = MeasureAnnotationLayout.displayPosition(
+                    midpoint: PlanePoint(x: (shot.fishA.x + shot.fishB.x) / 2,
+                                         y: (shot.fishA.y + shot.fishB.y) / 2),
+                    offsetX: offset.x, offsetY: offset.y,
+                    width: Double(size.width), height: Double(size.height),
+                    margin: Double(size.width) * 0.06)
+            } else {
+                labelPos = MeasureAnnotationLayout.labelPosition(
+                    p1: shot.fishA, p2: shot.fishB,
+                    offset: Double(size.width) * 0.06,
+                    width: Double(size.width), height: Double(size.height))
+            }
             imageToSave = ImageAnnotator.drawMeasurement(
                 from: CGPoint(x: shot.fishA.x, y: shot.fishA.y),
                 to: CGPoint(x: shot.fishB.x, y: shot.fishB.y),

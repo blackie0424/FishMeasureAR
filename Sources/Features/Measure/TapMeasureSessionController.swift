@@ -218,6 +218,14 @@ final class TapMeasureSessionController: NSObject, ObservableObject, ARSessionDe
         lineMidpointInView = nil
     }
 
+    /// 快照前隱藏 3D 量測實體:AR 錨點在改構圖時可能飄移,
+    /// 照片上的線改由「確認測量線」步驟在靜態影像上定位、存檔時合成。
+    func setMeasurementVisible(_ visible: Bool) {
+        pointAnchors.forEach { $0.isEnabled = visible }
+        lineAnchor?.isEnabled = visible
+        previewAnchor?.isEnabled = visible
+    }
+
     /// 兩端點投影回目前畫面座標(拍照時定位長度標籤用)
     func projectedEndpoints() -> (CGPoint, CGPoint)? {
         guard let arView, worldPoints.count == 2,

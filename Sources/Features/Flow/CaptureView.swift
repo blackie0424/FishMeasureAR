@@ -220,8 +220,7 @@ struct CaptureView: View {
                     withAnimation(.easeOut(duration: 0.25)) { flash = false }
                 }
                 coordinator.takeShot(from: controller,
-                                     bubbleOffset: bubbleOffset,
-                                     bubbleRotationDegrees: bubbleRotation)
+                                     bubbleOffset: bubbleOffset)
             }
         } label: {
             ZStack {

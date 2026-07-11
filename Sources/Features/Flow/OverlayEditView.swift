@@ -24,7 +24,7 @@ struct OverlayEditView: View {
 
     private var header: some View {
         HStack {
-            Button("‹ 重拍") { coordinator.backFromOverlayEdit() }
+            Button("‹ 上一步") { coordinator.backFromOverlayEdit() }
                 .font(.footnote)
                 .padding(.horizontal, 14).padding(.vertical, 8)
                 .background(Color.white.opacity(0.12), in: Capsule())
