@@ -91,11 +91,11 @@ struct CaptureView: View {
             return "連拍中:按快門拍照,稍後於統計頁補量"
         }
         if !controller.reticleHasSurface && controller.measure.points.isEmpty {
-            return "緩慢移動手機,讓準星對到魚身(準星變綠)"
+            return "AR 初始化中,稍微移動手機掃描表面"
         }
         switch controller.measure.points.count {
-        case 0:  return "準星對準吻端,按「＋」標 A 點"
-        case 1:  return "移到尾叉,按「＋」標 B 點"
+        case 0:  return "構好圖後,直接點畫面上的吻端標 A 點"
+        case 1:  return "再點尾叉標 B 點(手機不用移動)"
         default: return "完成!可拖曳數字避開魚身,按快門拍照"
         }
     }
@@ -110,10 +110,8 @@ struct CaptureView: View {
         ZStack {
             ARViewContainer(controller: controller)
 
-            reticle
-
             if let mid = controller.lineMidpointInView,
-               let cm = controller.lengthCM ?? controller.previewLengthCM {
+               let cm = controller.lengthCM {
                 let isFinal = controller.measure.isComplete
                 // 線中點 + 使用者偏移,夾在預覽內(與照片合成同一算式)
                 let pos = MeasureAnnotationLayout.displayPosition(
@@ -147,26 +145,20 @@ struct CaptureView: View {
         }
         .frame(width: width, height: height)
         .clipped()
+        .contentShape(Rectangle())
+        // 點哪量哪:直接點畫面上的物體端點設 A/B(構圖先行,手機不必移動)
+        .gesture(
+            SpatialTapGesture(coordinateSpace: .local)
+                .onEnded { value in
+                    guard controller.measure.canAddPoint else { return }
+                    if !controller.addPoint(at: value.location) {
+                        coordinator.showToast("這個位置抓不到表面,請點在物體上再試")
+                    }
+                }
+        )
         .onChange(of: controller.measure.isComplete) { _, complete in
             if !complete { bubbleOffset = .zero }   // 重量測時歸位
         }
-    }
-
-    private var reticle: some View {
-        let ready = controller.reticleHasSurface
-        return ZStack {
-            Circle()
-                .strokeBorder(ready ? Color.green : .white.opacity(0.5), lineWidth: 2)
-                .frame(width: 44, height: 44)
-            Group {
-                Rectangle().frame(width: 1.5, height: 14)
-                Rectangle().frame(width: 14, height: 1.5)
-            }
-            .foregroundStyle(ready ? Color.green : .white.opacity(0.5))
-            Circle().fill(ready ? Color.green : .white.opacity(0.5))
-                .frame(width: 4, height: 4)
-        }
-        .allowsHitTesting(false)
     }
 
     /// 貼在量測線中點的數字氣泡(拍照時同樣式合成進照片)
@@ -203,38 +195,27 @@ struct CaptureView: View {
         .frame(maxWidth: .infinity)
     }
 
-    /// 唯一主按鈕:「＋」設點 → 兩點齊備變快門(白色實心圓)
+    /// 主按鈕=純快門(點位改為直接點畫面設定):
+    /// 單拍需完成量測才可拍,連拍隨時可拍
     private var mainButton: some View {
-        let action = CaptureControls.mainAction(mode: coordinator.flow.mode,
-                                                isComplete: controller.measure.isComplete)
-        let enabled = CaptureControls.isEnabled(action,
-                                                reticleHasSurface: controller.reticleHasSurface)
+        let enabled = CaptureControls.shutterEnabled(
+            mode: coordinator.flow.mode,
+            isComplete: controller.measure.isComplete)
         return Button {
-            switch action {
-            case .addPoint:
-                controller.addPoint()
-            case .shutter:
-                withAnimation(.easeOut(duration: 0.1)) { flash = true }
-                Task {
-                    try? await Task.sleep(for: .milliseconds(150))
-                    withAnimation(.easeOut(duration: 0.25)) { flash = false }
-                }
-                coordinator.takeShot(from: controller,
-                                     bubbleOffset: bubbleOffset,
-                                     bubbleRotationDegrees: bubbleRotation)
+            withAnimation(.easeOut(duration: 0.1)) { flash = true }
+            Task {
+                try? await Task.sleep(for: .milliseconds(150))
+                withAnimation(.easeOut(duration: 0.25)) { flash = false }
             }
+            coordinator.takeShot(from: controller,
+                                 bubbleOffset: bubbleOffset)
         } label: {
             ZStack {
                 Circle()
                     .strokeBorder(.white, lineWidth: 4)
                     .frame(width: 76, height: 76)
-                if action == .shutter {
-                    Circle().fill(.white).frame(width: 60, height: 60)
-                } else {
-                    Image(systemName: "plus")
-                        .font(.system(size: 30, weight: .bold))
-                        .foregroundStyle(enabled ? .white : .white.opacity(0.35))
-                }
+                Circle().fill(enabled ? .white : .white.opacity(0.35))
+                    .frame(width: 60, height: 60)
             }
         }
         .disabled(!enabled)

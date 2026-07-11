@@ -1,33 +1,17 @@
 import XCTest
 @testable import FishMeasureKit
 
-/// 拍攝畫面唯一主按鈕的情境邏輯:
-/// 單拍模式下未完成量測 = 「＋」設點,兩點齊備 = 快門;連拍模式一律快門。
+/// 拍攝畫面主按鈕:點位改為「直接點照片任意位置」設定後,
+/// 主按鈕只剩快門一種角色——單拍需完成量測,連拍隨時可拍。
 final class CaptureControlsTests: XCTestCase {
 
-    func testSingleModeBeforeCompleteIsAddPoint() {
-        XCTAssertEqual(CaptureControls.mainAction(mode: .single, isComplete: false),
-                       .addPoint)
+    func testSingleModeShutterRequiresCompleteMeasurement() {
+        XCTAssertFalse(CaptureControls.shutterEnabled(mode: .single, isComplete: false))
+        XCTAssertTrue(CaptureControls.shutterEnabled(mode: .single, isComplete: true))
     }
 
-    func testSingleModeAfterCompleteIsShutter() {
-        XCTAssertEqual(CaptureControls.mainAction(mode: .single, isComplete: true),
-                       .shutter)
-    }
-
-    func testBurstModeIsAlwaysShutter() {
-        XCTAssertEqual(CaptureControls.mainAction(mode: .burst, isComplete: false),
-                       .shutter)
-        XCTAssertEqual(CaptureControls.mainAction(mode: .burst, isComplete: true),
-                       .shutter)
-    }
-
-    func testAddPointRequiresSurface() {
-        XCTAssertFalse(CaptureControls.isEnabled(.addPoint, reticleHasSurface: false))
-        XCTAssertTrue(CaptureControls.isEnabled(.addPoint, reticleHasSurface: true))
-    }
-
-    func testShutterDoesNotRequireSurface() {
-        XCTAssertTrue(CaptureControls.isEnabled(.shutter, reticleHasSurface: false))
+    func testBurstModeShutterAlwaysEnabled() {
+        XCTAssertTrue(CaptureControls.shutterEnabled(mode: .burst, isComplete: false))
+        XCTAssertTrue(CaptureControls.shutterEnabled(mode: .burst, isComplete: true))
     }
 }

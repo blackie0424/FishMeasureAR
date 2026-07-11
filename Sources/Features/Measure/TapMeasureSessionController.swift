@@ -4,17 +4,15 @@ import SwiftUI
 import FishMeasureKit
 import os
 
-/// 仿 iOS 測距儀的 AR 兩點量測:
-/// 準星(畫面中心)raycast 到表面,按「＋」設定 A、B 點(世界座標錨定,
-/// 移動手機點位仍貼在物體上);兩點齊備後畫出 3D 線段並得長度。
-/// 點與線是 RealityKit 實體,ARView 快照會自動包含,拍照即合成。
+/// AR 兩點量測(構圖先行版):
+/// 直接點擊畫面上的物體端點設定 A、B(任意位置取點,手機不必移動,
+/// 構圖不被打斷);點位以世界座標錨定,兩點齊備後畫出 3D 線段並得長度。
+/// 快照時 3D 實體會隱藏,照片上的線由確認頁定位、存檔時合成。
 @MainActor
 final class TapMeasureSessionController: NSObject, ObservableObject, ARSessionDelegate {
 
     @Published private(set) var measure = TwoPointMeasure()
     @Published private(set) var reticleHasSurface = false
-    /// 設定第一點後,A 點到準星的即時預覽長度(cm)
-    @Published private(set) var previewLengthCM: Double?
     /// 量測線中點的畫面座標(數字氣泡直接貼在線上顯示用)
     @Published private(set) var lineMidpointInView: CGPoint?
     @Published private(set) var hasLiDAR = false
@@ -26,8 +24,6 @@ final class TapMeasureSessionController: NSObject, ObservableObject, ARSessionDe
     private var worldPoints: [SIMD3<Float>] = []
     private var pointAnchors: [AnchorEntity] = []
     private var lineAnchor: AnchorEntity?
-    private var previewAnchor: AnchorEntity?
-    private var previewLine: ModelEntity?
     /// 幀節流:在 delegate 執行緒先過濾,避免每幀都往 MainActor 丟 Task
     private let frameGate = OSAllocatedUnfairLock(initialState: 0)
     /// 重定位卡死看門狗:limited(.relocalizing) 持續超過門檻就整個重置
@@ -91,41 +87,24 @@ final class TapMeasureSessionController: NSObject, ObservableObject, ARSessionDe
         Task { @MainActor in self.tick() }
     }
 
-    /// 更新準星狀態、預覽線與數字氣泡位置
+    /// 更新 AR 就緒狀態(畫面中心探測,供提示文字用)與數字氣泡位置
     private func tick() {
         watchdogCheckTracking()
 
-        let hit = centerWorldPoint()
-        reticleHasSurface = hit != nil
+        reticleHasSurface = worldPoint(atView: viewCenter()) != nil
 
-        switch worldPoints.count {
-        case 1:
-            if let hit, let arView {
-                updatePreviewLine(from: worldPoints[0], to: hit)
-                previewLengthCM = Double(simd_distance(worldPoints[0], hit)) * 100
-                if let a = arView.project(worldPoints[0]) {
-                    let center = CGPoint(x: arView.bounds.midX, y: arView.bounds.midY)
-                    lineMidpointInView = CGPoint(x: (a.x + center.x) / 2,
-                                                 y: (a.y + center.y) / 2)
-                } else {
-                    lineMidpointInView = nil
-                }
-            } else {
-                previewLengthCM = nil
-                lineMidpointInView = nil
-            }
-        case 2:
-            if let arView,
-               let a = arView.project(worldPoints[0]),
-               let b = arView.project(worldPoints[1]) {
-                lineMidpointInView = CGPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2)
-            } else {
-                lineMidpointInView = nil
-            }
-        default:
-            previewLengthCM = nil
+        if worldPoints.count == 2, let arView,
+           let a = arView.project(worldPoints[0]),
+           let b = arView.project(worldPoints[1]) {
+            lineMidpointInView = CGPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2)
+        } else {
             lineMidpointInView = nil
         }
+    }
+
+    private func viewCenter() -> CGPoint {
+        guard let arView else { return .zero }
+        return CGPoint(x: arView.bounds.midX, y: arView.bounds.midY)
     }
 
     // MARK: Session 復原(切到相簿再回來、相機被搶用等情境)
@@ -176,10 +155,13 @@ final class TapMeasureSessionController: NSObject, ObservableObject, ARSessionDe
 
     // MARK: 量測操作
 
-    func addPoint() {
+    /// 於畫面任意位置設點(點哪量哪,構圖不必移動)。
+    /// 回傳是否成功(該處抓不到表面時 false,由 UI 提示)。
+    @discardableResult
+    func addPoint(at viewPoint: CGPoint) -> Bool {
         guard measure.canAddPoint,
-              let world = centerWorldPoint(),
-              let arView else { return }
+              let world = worldPoint(atView: viewPoint),
+              let arView else { return false }
 
         worldPoints.append(world)
         measure.addPoint(WorldPoint(x: Double(world.x),
@@ -192,9 +174,9 @@ final class TapMeasureSessionController: NSObject, ObservableObject, ARSessionDe
         pointAnchors.append(anchor)
 
         if worldPoints.count == 2 {
-            removePreview()
             drawLine(from: worldPoints[0], to: worldPoints[1])
         }
+        return true
     }
 
     func undo() {
@@ -213,9 +195,14 @@ final class TapMeasureSessionController: NSObject, ObservableObject, ARSessionDe
         pointAnchors.forEach { arView?.scene.removeAnchor($0) }
         pointAnchors.removeAll()
         removeLine()
-        removePreview()
-        previewLengthCM = nil
         lineMidpointInView = nil
+    }
+
+    /// 快照前隱藏 3D 量測實體:AR 錨點在改構圖時可能飄移,
+    /// 照片上的線改由「確認測量線」步驟在靜態影像上定位、存檔時合成。
+    func setMeasurementVisible(_ visible: Bool) {
+        pointAnchors.forEach { $0.isEnabled = visible }
+        lineAnchor?.isEnabled = visible
     }
 
     /// 兩端點投影回目前畫面座標(拍照時定位長度標籤用)
@@ -226,14 +213,13 @@ final class TapMeasureSessionController: NSObject, ObservableObject, ARSessionDe
         return (a, b)
     }
 
-    // MARK: 準星取點(三段後備,讓「變綠」幾乎即時)
+    // MARK: 任意位置取點(三段後備)
 
-    private func centerWorldPoint() -> SIMD3<Float>? {
+    private func worldPoint(atView point: CGPoint) -> SIMD3<Float>? {
         guard let arView, arView.bounds.size != .zero else { return nil }
-        let center = CGPoint(x: arView.bounds.midX, y: arView.bounds.midY)
 
         // 1) 平面 raycast:平面已知時最穩定
-        if let result = arView.raycast(from: center,
+        if let result = arView.raycast(from: point,
                                        allowing: .estimatedPlane,
                                        alignment: .any).first {
             let t = result.worldTransform.columns.3
@@ -241,27 +227,29 @@ final class TapMeasureSessionController: NSObject, ObservableObject, ARSessionDe
         }
         // 2) LiDAR 深度直接反投影:即開即用,不必等平面偵測,
         //    對貼在魚體(濕滑/低特徵)上的點也更準
-        if let world = depthCenterWorldPoint() {
+        if let world = depthWorldPoint(atView: point) {
             return world
         }
         // 3) 特徵點(非 LiDAR 的最後手段;API 已棄用但仍可用)
-        if let hit = arView.hitTest(center, types: .featurePoint).first {
+        if let hit = arView.hitTest(point, types: .featurePoint).first {
             let t = hit.worldTransform.columns.3
             return SIMD3(t.x, t.y, t.z)
         }
         return nil
     }
 
-    /// view 中心 → 逆 displayTransform → capturedImage 像素 → LiDAR 深度反投影
-    private func depthCenterWorldPoint() -> SIMD3<Float>? {
+    /// view 座標 → 逆 displayTransform → capturedImage 像素 → LiDAR 深度反投影
+    private func depthWorldPoint(atView point: CGPoint) -> SIMD3<Float>? {
         guard hasLiDAR, let arView,
               let frame = arView.session.currentFrame else { return nil }
         let viewSize = arView.bounds.size
+        guard viewSize.width > 0, viewSize.height > 0 else { return nil }
         let imageW = CGFloat(CVPixelBufferGetWidth(frame.capturedImage))
         let imageH = CGFloat(CVPixelBufferGetHeight(frame.capturedImage))
         let inverse = frame.displayTransform(for: .portrait,
                                              viewportSize: viewSize).inverted()
-        let norm = CGPoint(x: 0.5, y: 0.5).applying(inverse)
+        let norm = CGPoint(x: point.x / viewSize.width,
+                           y: point.y / viewSize.height).applying(inverse)
         let pixel = CGPoint(x: norm.x * imageW, y: norm.y * imageH)
         return DepthUnprojector.unproject(pixel: pixel, frame: frame)
     }
@@ -281,35 +269,9 @@ final class TapMeasureSessionController: NSObject, ObservableObject, ARSessionDe
         lineAnchor = anchor
     }
 
-    private func updatePreviewLine(from a: SIMD3<Float>, to b: SIMD3<Float>) {
-        let length = simd_distance(a, b)
-        guard length > 0.001, let arView else { return }
-
-        if previewAnchor == nil {
-            // 單位長線段,之後只改 scale/orientation,避免每幀重建 mesh
-            let entity = ModelEntity(
-                mesh: .generateBox(size: [1, 0.002, 0.002]),
-                materials: [UnlitMaterial(color: Self.lineColor)])
-            let anchor = AnchorEntity(world: SIMD3<Float>.zero)
-            anchor.addChild(entity)
-            arView.scene.addAnchor(anchor)
-            previewAnchor = anchor
-            previewLine = entity
-        }
-        previewAnchor?.position = (a + b) / 2
-        previewLine?.orientation = simd_quatf(from: [1, 0, 0], to: simd_normalize(b - a))
-        previewLine?.scale = [length, 1, 1]
-    }
-
     private func removeLine() {
         if let lineAnchor { arView?.scene.removeAnchor(lineAnchor) }
         lineAnchor = nil
-    }
-
-    private func removePreview() {
-        if let previewAnchor { arView?.scene.removeAnchor(previewAnchor) }
-        previewAnchor = nil
-        previewLine = nil
     }
 
     private static func makeDot() -> ModelEntity {

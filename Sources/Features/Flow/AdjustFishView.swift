@@ -1,8 +1,9 @@
 import SwiftUI
 import FishMeasureKit
 
-/// 步驟 1/2 量魚:在凍結照片上拖曳兩端點對齊魚身(吻端 → 尾叉)。
-/// AR 已測得長度時端點預填、拖曳按 cm/px 重算;否則進入比例尺步驟。
+/// 確認測量線:照片已凍結,拖曳兩端點對齊物體(吻端 → 尾叉)。
+/// AR 錨點在改構圖時可能飄移——凍結後修正才可靠。
+/// AR 已測得長度時端點預填、拖曳按 cm/px 重算;無讀值則進比例尺步驟。
 struct AdjustFishView: View {
     @ObservedObject var coordinator: MeasureFlowCoordinator
 
@@ -86,8 +87,8 @@ struct AdjustFishView: View {
     }
 
     private var stepBadge: some View {
-        (Text("步驟 1/2  ").bold().foregroundStyle(.cyan)
-            + Text("沿魚拉線:吻端 → 尾叉").foregroundStyle(.white))
+        (Text("確認測量線  ").bold().foregroundStyle(.cyan)
+            + Text("線若偏移,拖曳端點對齊物體").foregroundStyle(.white))
             .font(.footnote)
             .padding(.horizontal, 16).padding(.vertical, 8)
             .background(Color.black.opacity(0.75), in: Capsule())
