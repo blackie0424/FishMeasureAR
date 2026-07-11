@@ -111,6 +111,7 @@ struct FormView: View {
                 .resizable()
                 .frame(width: overlay.size.width * scale,
                        height: overlay.size.height * scale)
+                .rotationEffect(.degrees(coordinator.overlayRotationDegrees))
                 .position(ImageFitGeometry.viewPoint(fromImage: center,
                                                      imageSize: imageSize,
                                                      container: container))
