@@ -27,25 +27,28 @@ final class MeasureFlowTests: XCTestCase {
         XCTAssertEqual(flow.pendingShots, 0)
     }
 
-    func testShutterWithCompletedMeasurementGoesToOverlayEdit() {
-        // 測距儀式兩點已設定 → 先進比例尺編輯,結束才到表單
+    func testShutterAlwaysConfirmsLineOnStillFirst() {
+        // 快門後一律先在靜態照片上確認/微調測量線
+        // (AR 錨點在改構圖時可能飄移,凍結後修正才可靠)
         var flow = MeasureFlow()
-        flow.shutterPressed(measurementReady: true)
-        XCTAssertEqual(flow.screen, .overlayEdit)
+        flow.shutterPressed()
+        XCTAssertEqual(flow.screen, .adjustFish)
     }
 
     func testOverlayEditAdvancesToForm() {
         var flow = MeasureFlow()
-        flow.shutterPressed(measurementReady: true)
+        flow.shutterPressed()
+        flow.advanceFromAdjustFish(hasMetricLength: true)
         flow.advanceFromOverlayEdit()
         XCTAssertEqual(flow.screen, .form)
     }
 
-    func testOverlayEditBackForMetricPathReturnsToCapture() {
+    func testOverlayEditBackForMetricPathReturnsToAdjust() {
         var flow = MeasureFlow()
-        flow.shutterPressed(measurementReady: true)
+        flow.shutterPressed()
+        flow.advanceFromAdjustFish(hasMetricLength: true)
         flow.backFromOverlayEdit(hasMetricLength: true)
-        XCTAssertEqual(flow.screen, .capture)
+        XCTAssertEqual(flow.screen, .adjustFish)
     }
 
     func testOverlayEditBackForManualPathReturnsToScale() {
@@ -57,10 +60,10 @@ final class MeasureFlowTests: XCTestCase {
         XCTAssertEqual(flow.screen, .scale)
     }
 
-    func testBurstShutterIgnoresMeasurementReady() {
+    func testBurstShutterOnlyQueues() {
         var flow = MeasureFlow()
         flow.setMode(.burst)
-        flow.shutterPressed(measurementReady: true)
+        flow.shutterPressed()
         XCTAssertEqual(flow.screen, .capture)
         XCTAssertEqual(flow.pendingShots, 1)
     }
