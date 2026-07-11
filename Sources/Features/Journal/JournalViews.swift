@@ -104,8 +104,12 @@ struct CatchDetailView: View {
                 }
             }
             Section("編輯") {
-                TextField("魚種", text: Binding($record.speciesName, default: ""))
-                TextField("漁法", text: Binding($record.fishingMethod, default: ""))
+                PresetOrCustomField(title: "魚種",
+                                    options: FormView.speciesOptions,
+                                    value: $record.speciesName)
+                PresetOrCustomField(title: "漁法",
+                                    options: FormView.methodOptions,
+                                    value: $record.fishingMethod)
                 TextField("備註", text: Binding($record.note, default: ""), axis: .vertical)
             }
         }
@@ -118,6 +122,53 @@ extension Binding where Value == String {
     init(_ source: Binding<String?>, default defaultValue: String) {
         self.init(get: { source.wrappedValue ?? defaultValue },
                   set: { source.wrappedValue = $0.isEmpty ? nil : $0 })
+    }
+}
+
+/// 編輯欄位:先列預設選項(點選即套用),最後才是「其他」自行輸入。
+/// 目前值命中選項時該選項高亮;輸入自訂文字則自動取消選項高亮。
+struct PresetOrCustomField: View {
+    let title: String
+    let options: [String]
+    @Binding var value: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title).font(.subheadline.bold())
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 88), spacing: 8)],
+                      alignment: .leading, spacing: 8) {
+                ForEach(options, id: \.self) { option in
+                    ChipButton(label: option,
+                               isSelected: value == option,
+                               accent: .cyan) {
+                        value = option
+                    }
+                }
+            }
+            TextField("其他(自行輸入)", text: customText)
+                .textFieldStyle(.roundedBorder)
+                .font(.footnote)
+        }
+        .padding(.vertical, 4)
+    }
+
+    /// 自訂輸入:值命中預設選項時顯示空白;輸入即覆寫;
+    /// 清空自訂文字回到未選(不誤刪已點選的預設值)。
+    private var customText: Binding<String> {
+        Binding(
+            get: {
+                guard let value, !options.contains(value) else { return "" }
+                return value
+            },
+            set: { newText in
+                if newText.isEmpty {
+                    if let current = value, !options.contains(current) {
+                        value = nil
+                    }
+                } else {
+                    value = newText
+                }
+            })
     }
 }
 
