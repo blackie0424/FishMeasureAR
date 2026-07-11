@@ -73,6 +73,16 @@ extension CatchRecord {
         placeNote ?? placeName
     }
 
+    /// 量測方式的顯示文字(不給使用者看內部代號)
+    var measureMethodLabel: String {
+        switch measureMethod {
+        case "tap-lidar":    return "AR 測距(LiDAR)"
+        case "tap-plane":    return "AR 測距"
+        case "manual-scale": return "比例尺換算"
+        default:              return measureMethod
+        }
+    }
+
     var lengthLabel: String {
         lengthCM.map { String(format: "%.1f cm", $0) } ?? "未量測"
     }
