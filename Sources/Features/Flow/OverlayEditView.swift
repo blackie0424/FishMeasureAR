@@ -22,6 +22,7 @@ struct OverlayEditView: View {
 
     // MARK: 標題列
 
+    // 介面統一:返回在左上、主要動作(下一步)在右下,與確認頁/比例尺換算頁一致
     private var header: some View {
         HStack {
             Button("‹ 上一步") { coordinator.backFromOverlayEdit() }
@@ -33,15 +34,8 @@ struct OverlayEditView: View {
             Text("比例尺物件")
                 .font(.subheadline.bold()).foregroundStyle(.white)
             Spacer()
-            Button {
-                coordinator.advanceFromOverlayEdit()
-            } label: {
-                Text("下一步 ›")
-                    .font(.footnote.bold())
-                    .padding(.horizontal, 16).padding(.vertical, 8)
-                    .background(Color.cyan, in: Capsule())
-                    .foregroundStyle(.black)
-            }
+            // 佔位保持標題置中
+            Color.clear.frame(width: 76, height: 1)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
@@ -138,6 +132,16 @@ struct OverlayEditView: View {
                                accent: .orange) {
                         coordinator.selectOverlay(ref)
                     }
+                }
+                Spacer()
+                Button {
+                    coordinator.advanceFromOverlayEdit()
+                } label: {
+                    Text("下一步 ›")
+                        .font(.subheadline.bold())
+                        .padding(.horizontal, 22).padding(.vertical, 12)
+                        .background(Color.cyan, in: RoundedRectangle(cornerRadius: 12))
+                        .foregroundStyle(.black)
                 }
                 if coordinator.overlayReference != nil {
                     Button {
