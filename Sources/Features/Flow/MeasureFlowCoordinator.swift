@@ -18,6 +18,8 @@ final class MeasureFlowCoordinator: ObservableObject {
     @Published var selectedReference: ScaleReference = ScaleReference.catalog[0]
     /// 儲存進行中(表單顯示旋轉指示、鎖定按鈕防重複點擊)
     @Published private(set) var isSaving = false
+    /// 表單備註(選填,存入 CatchRecord.note)
+    @Published var note: String = ""
 
     // MARK: 參照物疊圖(拍照後在表單擺放,存檔時等比合成)
 
@@ -218,6 +220,7 @@ final class MeasureFlowCoordinator: ObservableObject {
 
     func backToCapture() {
         currentShot = nil
+        note = ""
         clearOverlay()
         tapController.reset()   // 清上一尾的點位,世界地圖保留
         flow.backToCapture()
@@ -341,6 +344,8 @@ final class MeasureFlowCoordinator: ObservableObject {
                 isLocationFuzzed: fuzz,
                 photoLocalID: localID,
                 referenceObjectsUsed: usedReference)
+            let trimmedNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
+            record.note = trimmedNote.isEmpty ? nil : trimmedNote
             context.insert(record)
 
             if flow.isMeasuringPending, !pendingQueue.isEmpty {
@@ -349,6 +354,7 @@ final class MeasureFlowCoordinator: ObservableObject {
             _ = flow.save(to: destination)
             currentShot = nil
             selectedReference = ScaleReference.catalog[0]
+            note = ""
             clearOverlay()
             tapController.reset()   // 下一尾從乾淨的點位開始
             logger.info("saveRecord: done")

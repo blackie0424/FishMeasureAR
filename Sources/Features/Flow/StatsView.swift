@@ -5,6 +5,8 @@ import FishMeasureKit
 /// 今日調查:種類長條、尺寸分布、紀錄清單、CSV 匯出、連拍待量佇列。
 struct StatsView: View {
     @ObservedObject var coordinator: MeasureFlowCoordinator
+    /// 由 RootView 注入:切回「測量」分頁(繼續測量/去量用)
+    var onNavigateToMeasure: (() -> Void)? = nil
     @Query(sort: \CatchRecord.createdAt, order: .reverse)
     private var allRecords: [CatchRecord]
     @State private var shareURL: URL?
@@ -57,6 +59,7 @@ struct StatsView: View {
             if coordinator.flow.pendingShots > 0 {
                 Button("未量測 ×\(coordinator.flow.pendingShots) ▸ 去量") {
                     coordinator.beginPendingMeasurement()
+                    onNavigateToMeasure?()
                 }
                 .font(.caption.bold())
                 .padding(.horizontal, 12).padding(.vertical, 6)
@@ -182,7 +185,10 @@ struct StatsView: View {
                 .foregroundStyle(.white)
                 .disabled(todayRecords.isEmpty)
 
-            Button("📷 繼續測量") { coordinator.backToCapture() }
+            Button("📷 繼續測量") {
+                coordinator.backToCapture()
+                onNavigateToMeasure?()
+            }
                 .font(.footnote.bold())
                 .padding(.horizontal, 20).padding(.vertical, 10)
                 .background(Color.cyan, in: RoundedRectangle(cornerRadius: 12))

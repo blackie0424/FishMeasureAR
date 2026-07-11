@@ -3,16 +3,16 @@ import FishMeasureKit
 
 /// 測量工作流根視圖:依狀態機切換五個畫面(拍照/量魚/比例尺/表單/統計)。
 struct MeasureFlowScreen: View {
-    @StateObject private var coordinator = MeasureFlowCoordinator()
+    @ObservedObject var coordinator: MeasureFlowCoordinator
 
     var body: some View {
         // NavigationStack 只為了 toolbar 可見性控制:
-        // 量測流程(拍攝→量魚→比例尺→表單)全程沉浸式隱藏 Tab bar,
-        // 只有統計頁(瀏覽性質)顯示分頁列。
+        // 拍攝畫面顯示分頁列(可隨時切到其他分頁);
+        // 進入流程(確認線/比例尺/表單)後隱藏,避免中途誤觸離開。
         NavigationStack {
             content
                 .toolbar(.hidden, for: .navigationBar)
-                .toolbar(coordinator.flow.screen == .stats ? .visible : .hidden,
+                .toolbar(coordinator.flow.screen == .capture ? .visible : .hidden,
                          for: .tabBar)
         }
     }
