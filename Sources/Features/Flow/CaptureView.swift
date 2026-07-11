@@ -1,5 +1,4 @@
 import SwiftUI
-import SwiftData
 import RealityKit
 import FishMeasureKit
 
@@ -29,7 +28,6 @@ struct CaptureView: View {
     @GestureState private var bubbleDragDelta: CGSize = .zero
     /// 氣泡角度:垂直俯拍時重力無法判斷橫直向,由使用者手動切換並記住
     @AppStorage("bubbleRotationDegrees") private var bubbleRotation = 0
-    @Query private var records: [CatchRecord]
 
     init(coordinator: MeasureFlowCoordinator) {
         self._coordinator = ObservedObject(wrappedValue: coordinator)
@@ -74,7 +72,6 @@ struct CaptureView: View {
                 }
                 Spacer()
                 rotateBubbleButton
-                recordCountButton
             }
             Text(hintText)
                 .font(.footnote.bold())
@@ -276,15 +273,5 @@ struct CaptureView: View {
         }
     }
 
-    private var recordCountButton: some View {
-        Button {
-            coordinator.goToStats()
-        } label: {
-            Text("紀錄 \(records.count)")
-                .font(.caption)
-                .padding(.horizontal, 12).padding(.vertical, 6)
-                .background(Color.white.opacity(0.12), in: Capsule())
-                .foregroundStyle(.white.opacity(0.85))
-        }
-    }
+
 }

@@ -9,8 +9,8 @@ struct FormView: View {
     @ObservedObject var coordinator: MeasureFlowCoordinator
     @Environment(\.modelContext) private var modelContext
 
-    static let speciesOptions = ["吳郭魚", "白帶魚", "午仔", "花身仔", "黑鯛", "臭肚", "其他"]
-    static let methodOptions = ["岸釣", "船釣", "磯釣", "刺網", "一支釣"]
+    static let speciesOptions = ["oyod", "rahet", "不食用", "不知道", "不分類", "尚未紀錄"]
+    static let methodOptions = ["mamasil", "mamacik", "mapazat", "manaoy", "mongozokozo", "船釣", "射魚"]
 
     var body: some View {
         GeometryReader { geo in
@@ -20,6 +20,7 @@ struct FormView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     speciesSection
                     methodSection
+                    noteSection
                     autoInfoLine
                     Spacer(minLength: 0)
                     bottomBar
@@ -159,6 +160,18 @@ struct FormView: View {
                 }
             }
         }
+    }
+
+    // MARK: 備註(選填)
+
+    private var noteSection: some View {
+        TextField("備註(選填)", text: $coordinator.note, axis: .vertical)
+            .lineLimit(1...3)
+            .font(.footnote)
+            .foregroundStyle(.white)
+            .padding(.horizontal, 12).padding(.vertical, 9)
+            .background(Color.white.opacity(0.06),
+                        in: RoundedRectangle(cornerRadius: 10))
     }
 
     // MARK: 自動記錄資訊(一行帶過)

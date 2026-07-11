@@ -7,9 +7,11 @@ import Photos
 
 struct JournalListView: View {
     @Query(sort: \CatchRecord.createdAt, order: .reverse) private var records: [CatchRecord]
+    @Environment(\.modelContext) private var modelContext
+    @State private var path = NavigationPath()
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             Group {
                 if records.isEmpty {
                     ContentUnavailableView("還沒有漁獲紀錄",
@@ -19,6 +21,20 @@ struct JournalListView: View {
                     List(records) { record in
                         NavigationLink(value: record.id) {
                             CatchRow(record: record)
+                        }
+                        // 左滑管理:刪除 / 編輯(編輯開詳情頁,欄位皆可改)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            Button(role: .destructive) {
+                                modelContext.delete(record)
+                            } label: {
+                                Label("刪除", systemImage: "trash")
+                            }
+                            Button {
+                                path.append(record.id)
+                            } label: {
+                                Label("編輯", systemImage: "pencil")
+                            }
+                            .tint(.blue)
                         }
                     }
                     .navigationDestination(for: UUID.self) { id in
@@ -87,8 +103,9 @@ struct CatchDetailView: View {
                                    + (record.isLocationFuzzed ? "(已模糊化)" : ""))
                 }
             }
-            Section("備註") {
+            Section("編輯") {
                 TextField("魚種", text: Binding($record.speciesName, default: ""))
+                TextField("漁法", text: Binding($record.fishingMethod, default: ""))
                 TextField("備註", text: Binding($record.note, default: ""), axis: .vertical)
             }
         }
