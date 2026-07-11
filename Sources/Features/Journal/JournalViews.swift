@@ -76,58 +76,167 @@ struct CatchRow: View {
 
 struct CatchDetailView: View {
     @Bindable var record: CatchRecord
+    @State private var viewerIndex = 0
+    @State private var showViewer = false
 
     var body: some View {
         Form {
+            // 照片(點擊看全螢幕大圖,可縮放)
             Section {
-                // 整組照片(原圖/測量版/比例物版)左右滑動瀏覽
                 TabView {
-                    ForEach(record.allPhotoIDs, id: \.self) { id in
+                    ForEach(Array(record.allPhotoIDs.enumerated()),
+                            id: \.offset) { index, id in
                         PhotoThumbnail(localID: id,
                                        targetSize: CGSize(width: 800, height: 800))
                             .clipped()
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                viewerIndex = index
+                                showViewer = true
+                            }
                     }
                 }
                 .tabViewStyle(.page(indexDisplayMode: .always))
                 .indexViewStyle(.page(backgroundDisplayMode: .always))
                 .frame(height: 300)
                 .listRowInsets(EdgeInsets())
+            } footer: {
+                Text("點照片可放大檢視").font(.caption2)
             }
+
             Section("測量") {
                 LabeledContent("魚長", value: record.lengthLabel)
-                LabeledContent("方式", value: record.measureMethod)
-                if let method = record.fishingMethod {
-                    LabeledContent("漁法", value: method)
-                }
+                LabeledContent("方式", value: record.measureMethodLabel)
                 LabeledContent("時間", value: record.createdAt.formatted())
             }
+
+            Section("魚種") {
+                PresetOrCustomField(options: FormView.speciesOptions,
+                                    value: $record.speciesName)
+            }
+
+            Section("漁法") {
+                PresetOrCustomField(options: FormView.methodOptions,
+                                    value: $record.fishingMethod)
+            }
+
             Section("釣點") {
-                if let place = record.displayPlace {
-                    LabeledContent("地點", value: place)
+                if let place = record.placeName {
+                    LabeledContent("自動定位", value: place)
                 }
                 if let lat = record.latitude, let lon = record.longitude {
                     LabeledContent("座標",
                                    value: String(format: "%.4f, %.4f", lat, lon)
                                    + (record.isLocationFuzzed ? "(已模糊化)" : ""))
                 }
+                TextField("實際地點(如:開元港)",
+                          text: Binding($record.placeNote, default: ""))
             }
+
             Section("魚聲錄音") {
                 AudioNoteSection(record: record)
             }
-            Section("編輯") {
-                PresetOrCustomField(title: "魚種",
-                                    options: FormView.speciesOptions,
-                                    value: $record.speciesName)
-                PresetOrCustomField(title: "漁法",
-                                    options: FormView.methodOptions,
-                                    value: $record.fishingMethod)
-                TextField("實際地點(如:開元港)",
-                          text: Binding($record.placeNote, default: ""))
-                TextField("備註", text: Binding($record.note, default: ""), axis: .vertical)
+
+            Section("備註") {
+                TextField("備註", text: Binding($record.note, default: ""),
+                          axis: .vertical)
+                    .lineLimit(1...5)
             }
         }
         .navigationTitle("漁獲詳情")
         .navigationBarTitleDisplayMode(.inline)
+        .fullScreenCover(isPresented: $showViewer) {
+            PhotoViewerScreen(photoIDs: record.allPhotoIDs, startIndex: viewerIndex)
+        }
+    }
+}
+
+// MARK: - 全螢幕照片檢視(左右滑換張,雙指縮放,點兩下放大/還原)
+
+struct PhotoViewerScreen: View {
+    let photoIDs: [String]
+    let startIndex: Int
+    @State private var selection: Int = 0
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            Color.black.ignoresSafeArea()
+
+            TabView(selection: $selection) {
+                ForEach(Array(photoIDs.enumerated()), id: \.offset) { index, id in
+                    ZoomablePhotoView(localID: id).tag(index)
+                }
+            }
+            .tabViewStyle(.page(indexDisplayMode: .always))
+            .ignoresSafeArea()
+
+            Button {
+                dismiss()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 16, weight: .semibold))
+                    .padding(12)
+                    .background(Color.white.opacity(0.15), in: Circle())
+                    .foregroundStyle(.white)
+            }
+            .padding(.top, 8)
+            .padding(.trailing, 16)
+        }
+        .onAppear { selection = startIndex }
+    }
+}
+
+/// 全解析度照片+縮放(雙指縮放 1x-5x,點兩下切換 1x/2.5x)
+struct ZoomablePhotoView: View {
+    let localID: String
+    @State private var image: UIImage?
+    @State private var zoom: CGFloat = 1
+    @GestureState private var pinch: CGFloat = 1
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .scaleEffect(zoom * pinch)
+                    .gesture(
+                        MagnifyGesture()
+                            .updating($pinch) { value, state, _ in
+                                state = value.magnification
+                            }
+                            .onEnded { value in
+                                zoom = min(max(zoom * value.magnification, 1), 5)
+                            }
+                    )
+                    .onTapGesture(count: 2) {
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            zoom = zoom > 1 ? 1 : 2.5
+                        }
+                    }
+            } else {
+                ProgressView().tint(.white)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .task(id: localID) {
+            let status = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
+            guard status == .authorized || status == .limited else { return }
+            let assets = PHAsset.fetchAssets(withLocalIdentifiers: [localID],
+                                             options: nil)
+            guard let asset = assets.firstObject else { return }
+            let options = PHImageRequestOptions()
+            options.deliveryMode = .highQualityFormat
+            options.isNetworkAccessAllowed = true
+            PHImageManager.default().requestImage(
+                for: asset,
+                targetSize: PHImageManagerMaximumSize,
+                contentMode: .aspectFit,
+                options: options) { result, _ in
+                if let result { self.image = result }
+            }
+        }
     }
 }
 
@@ -203,13 +312,15 @@ extension Binding where Value == String {
 /// 編輯欄位:先列預設選項(點選即套用),最後才是「其他」自行輸入。
 /// 目前值命中選項時該選項高亮;輸入自訂文字則自動取消選項高亮。
 struct PresetOrCustomField: View {
-    let title: String
+    var title: String? = nil
     let options: [String]
     @Binding var value: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(title).font(.subheadline.bold())
+            if let title {
+                Text(title).font(.subheadline.bold())
+            }
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 88), spacing: 8)],
                       alignment: .leading, spacing: 8) {
                 ForEach(options, id: \.self) { option in
