@@ -23,8 +23,10 @@ final class MeasureFlowCoordinator: ObservableObject {
 
     @Published private(set) var overlayReference: ScaleReference?
     @Published private(set) var overlayImage: UIImage?
-    /// 疊圖中心(影像像素座標),表單上拖曳更新
+    /// 疊圖中心(影像像素座標),編輯頁拖曳更新
     @Published var overlayCenter: PlanePoint?
+    /// 疊圖角度(度;兩指旋轉或 90° 快轉鈕),存檔同角度合成
+    @Published var overlayRotationDegrees: Double = 0
 
     let locationService = LocationService()
     /// 跨畫面共用:AR session 不隨畫面切換銷毀,回到拍攝免重新等待平面偵測
@@ -144,6 +146,7 @@ final class MeasureFlowCoordinator: ObservableObject {
         overlayReference = nil
         overlayImage = nil
         overlayCenter = nil
+        overlayRotationDegrees = 0
     }
 
     // MARK: 拍照(測距儀式:快照已含 3D 點與線段,再合成長度標籤)
@@ -296,6 +299,7 @@ final class MeasureFlowCoordinator: ObservableObject {
                 overlayImage,
                 centeredAt: CGPoint(x: center.x, y: center.y),
                 longSidePx: longSide,
+                rotationDegrees: overlayRotationDegrees,
                 on: imageToSave)
             if let id = overlayReference?.id { usedReference.append(id) }
         }

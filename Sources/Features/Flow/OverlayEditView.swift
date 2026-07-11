@@ -6,6 +6,8 @@ import FishMeasureKit
 /// 完成後才進資料填寫。不需要參照物可直接下一步。
 struct OverlayEditView: View {
     @ObservedObject var coordinator: MeasureFlowCoordinator
+    /// 兩指旋轉的基準角(手勢結束時累積)
+    @State private var rotationBase: Double = 0
 
     private static let photoSpaceName = "overlayEditPhotoSpace"
 
@@ -62,6 +64,18 @@ struct OverlayEditView: View {
                 }
             }
             .coordinateSpace(name: Self.photoSpaceName)
+            // 兩指旋轉掛在整個照片區:單指拖(疊圖本體)移動、雙指在照片上
+            // 任意位置旋轉,兩種手勢互不干擾
+            .gesture(
+                RotateGesture()
+                    .onChanged { value in
+                        coordinator.overlayRotationDegrees =
+                            rotationBase + value.rotation.degrees
+                    }
+                    .onEnded { _ in
+                        rotationBase = coordinator.overlayRotationDegrees
+                    },
+                including: coordinator.overlayReference == nil ? .none : .all)
         }
         .clipped()
     }
@@ -87,6 +101,7 @@ struct OverlayEditView: View {
                 .resizable()
                 .frame(width: overlay.size.width * scale,
                        height: overlay.size.height * scale)
+                .rotationEffect(.degrees(coordinator.overlayRotationDegrees))
                 .contentShape(Rectangle())
                 .gesture(
                     DragGesture(minimumDistance: 0,
@@ -107,7 +122,7 @@ struct OverlayEditView: View {
         VStack(spacing: 10) {
             Text(coordinator.overlayReference == nil
                  ? "選擇參照物放進照片(依實際尺寸等比);不需要可直接下一步"
-                 : "拖曳圖片到魚旁邊,存檔時會合成在同位置")
+                 : "單指拖移 · 兩指旋轉(或按 ↻ 轉 90°),存檔時合成在同位置")
                 .font(.caption)
                 .foregroundStyle(.white.opacity(0.6))
 
@@ -122,6 +137,20 @@ struct OverlayEditView: View {
                                isSelected: coordinator.overlayReference?.id == ref.id,
                                accent: .orange) {
                         coordinator.selectOverlay(ref)
+                    }
+                }
+                if coordinator.overlayReference != nil {
+                    Button {
+                        let next = MeasureAnnotationLayout.nextRotation(
+                            Int(coordinator.overlayRotationDegrees.rounded()))
+                        coordinator.overlayRotationDegrees = Double(next)
+                        rotationBase = Double(next)
+                    } label: {
+                        Image(systemName: "rotate.right")
+                            .font(.system(size: 14, weight: .semibold))
+                            .padding(9)
+                            .background(Color.white.opacity(0.12), in: Circle())
+                            .foregroundStyle(.white.opacity(0.85))
                     }
                 }
             }

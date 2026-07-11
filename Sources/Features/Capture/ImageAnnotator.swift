@@ -5,10 +5,12 @@ import UIKit
 enum ImageAnnotator {
 
     /// 把參照物疊圖(已去背)畫進照片:
-    /// 以長邊等比縮放到 longSidePx(對應實際 cm/px),中心對齊指定點。
+    /// 以長邊等比縮放到 longSidePx(對應實際 cm/px),中心對齊指定點,
+    /// 可繞中心旋轉(與編輯畫面同角度,所見即所得)。
     static func drawOverlay(_ overlay: UIImage,
                             centeredAt center: CGPoint,
                             longSidePx: CGFloat,
+                            rotationDegrees: Double = 0,
                             on image: UIImage) -> UIImage {
         let longSide = max(overlay.size.width, overlay.size.height)
         guard longSide > 0, longSidePx > 0 else { return image }
@@ -17,11 +19,15 @@ enum ImageAnnotator {
                           height: overlay.size.height * scale)
 
         let renderer = UIGraphicsImageRenderer(size: image.size)
-        return renderer.image { _ in
+        return renderer.image { ctx in
             image.draw(at: .zero)
-            overlay.draw(in: CGRect(x: center.x - size.width / 2,
-                                    y: center.y - size.height / 2,
+            let cg = ctx.cgContext
+            cg.saveGState()
+            cg.translateBy(x: center.x, y: center.y)
+            cg.rotate(by: CGFloat(rotationDegrees) * .pi / 180)
+            overlay.draw(in: CGRect(x: -size.width / 2, y: -size.height / 2,
                                     width: size.width, height: size.height))
+            cg.restoreGState()
         }
     }
 
