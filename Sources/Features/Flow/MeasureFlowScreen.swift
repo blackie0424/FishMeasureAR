@@ -26,6 +26,8 @@ struct MeasureFlowScreen: View {
                 AdjustFishView(coordinator: coordinator)
             case .scale:
                 ScaleStepView(coordinator: coordinator)
+            case .overlayEdit:
+                OverlayEditView(coordinator: coordinator)
             case .form:
                 FormView(coordinator: coordinator)
             case .stats:

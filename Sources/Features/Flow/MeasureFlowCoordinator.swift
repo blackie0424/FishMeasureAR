@@ -233,6 +233,19 @@ final class MeasureFlowCoordinator: ObservableObject {
         flow.advanceFromAdjustFish(hasMetricLength: hasMetricLength)
     }
 
+    func advanceFromOverlayEdit() {
+        flow.advanceFromOverlayEdit()
+    }
+
+    /// 比例尺編輯往回:測距儀路徑=重拍(含清理),手動路徑=回比例尺換算
+    func backFromOverlayEdit() {
+        if hasMetricLength {
+            backToCapture()
+        } else {
+            flow.backFromOverlayEdit(hasMetricLength: false)
+        }
+    }
+
     /// 統計頁「去量」:取佇列第一張開始量測(儲存成功才移出佇列)。
     func beginPendingMeasurement() {
         guard let pending = pendingQueue.first else { return }
