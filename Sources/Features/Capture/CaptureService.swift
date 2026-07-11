@@ -40,33 +40,117 @@ final class CaptureService {
     private let logger = Logger(subsystem: "com.blackie.FishMeasureAR",
                                 category: "capture")
 
-    /// 浮水印(日期/地點;長度標籤由 ImageAnnotator 於量測位置合成)
-    /// + EXIF + 相簿。回傳 PHAsset localIdentifier。
-    /// 授權對話框等待不設限;寫入相簿本身 15 秒逾時,不讓 UI 永久卡死。
-    func save(image: UIImage, options: PhotoSaveOptions) async throws -> String {
+    /// 專屬相簿名稱:所有拍攝成果集中於此
+    static let albumTitle = "FishMeasureAR"
 
-        logger.info("save: start (\(Int(image.size.width))x\(Int(image.size.height)))")
-        let final = options.watermarkEnabled
-            ? addWatermark(to: image, placeName: options.watermarkPlace)
-            : image
-        logger.info("save: watermark done")
+    /// 一次儲存一組漁獲照片(最多三張)到「FishMeasureAR」相簿:
+    /// 1. 原圖(乾淨無合成,只帶 EXIF)
+    /// 2. 含測量線與長度(套浮水印設定)
+    /// 3. 原圖+比例物疊圖(套浮水印設定;未選比例物則略過)
+    /// 回傳「量測版」的 PHAsset localIdentifier(無量測版則為原圖),
+    /// 供日誌/統計縮圖使用。
+    /// 授權對話框等待不設限;寫入相簿本身 20 秒逾時,不讓 UI 永久卡死。
+    func saveCatchPhotos(original: UIImage,
+                         measured: UIImage?,
+                         reference: UIImage?,
+                         options: PhotoSaveOptions) async throws -> String {
 
-        let data = try encodeJPEGWithMetadata(final, location: options.gpsLocation)
-        logger.info("save: jpeg encoded (\(data.count) bytes)")
+        logger.info("save: start (original + measured=\(measured != nil) + reference=\(reference != nil))")
 
-        // 授權(可能跳系統對話框,等多久都合理,不設逾時)
-        let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
-        logger.info("save: photo auth = \(status.rawValue)")
-        guard status == .authorized || status == .limited else {
-            throw CaptureError.photoLibraryDenied
+        func watermarked(_ image: UIImage) -> UIImage {
+            options.watermarkEnabled
+                ? addWatermark(to: image, placeName: options.watermarkPlace)
+                : image
         }
 
-        // 寫入相簿:15 秒逾時保護
-        let localID = try await withTimeout(seconds: 15) {
-            try await Self.writeToPhotoLibrary(data)
+        var items: [Data] = []
+        items.append(try encodeJPEGWithMetadata(original, location: options.gpsLocation))
+        var primaryIndex = 0
+        if let measured {
+            items.append(try encodeJPEGWithMetadata(watermarked(measured),
+                                                    location: options.gpsLocation))
+            primaryIndex = items.count - 1
         }
-        logger.info("save: done, localID=\(localID)")
+        if let reference {
+            items.append(try encodeJPEGWithMetadata(watermarked(reference),
+                                                    location: options.gpsLocation))
+        }
+        logger.info("save: encoded \(items.count) photos")
+
+        // 授權(可能跳系統對話框,等多久都合理,不設逾時)。
+        // 建相簿需要 readWrite;若僅授權「加入照片」則退回無相簿的散存。
+        let rwStatus = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
+        logger.info("save: photo auth(readWrite) = \(rwStatus.rawValue)")
+        var album: PHAssetCollection?
+        if rwStatus == .authorized {
+            album = try? await Self.fetchOrCreateAlbum(named: Self.albumTitle)
+            if album == nil { logger.warning("save: album unavailable, saving without") }
+        } else if rwStatus != .limited {
+            let addStatus = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
+            guard addStatus == .authorized || addStatus == .limited else {
+                throw CaptureError.photoLibraryDenied
+            }
+        }
+
+        // 寫入相簿:20 秒逾時保護(一個交易寫入整組)
+        let itemsToWrite = items
+        let targetAlbum = album
+        let idx = primaryIndex
+        let localID = try await withTimeout(seconds: 20) {
+            try await Self.writeSet(itemsToWrite, primaryIndex: idx, album: targetAlbum)
+        }
+        logger.info("save: done, \(items.count) photos, primary=\(localID)")
         return localID
+    }
+
+    /// 找到或建立專屬相簿(需 readWrite 完整授權)
+    private static func fetchOrCreateAlbum(named title: String) async throws -> PHAssetCollection? {
+        let fetch = PHAssetCollection.fetchAssetCollections(with: .album,
+                                                            subtype: .albumRegular,
+                                                            options: nil)
+        var found: PHAssetCollection?
+        fetch.enumerateObjects { collection, _, stop in
+            if collection.localizedTitle == title {
+                found = collection
+                stop.pointee = true
+            }
+        }
+        if let found { return found }
+
+        var placeholderID = ""
+        try await PHPhotoLibrary.shared().performChanges {
+            let request = PHAssetCollectionChangeRequest
+                .creationRequestForAssetCollection(withTitle: title)
+            placeholderID = request.placeholderForCreatedAssetCollection.localIdentifier
+        }
+        return PHAssetCollection.fetchAssetCollections(
+            withLocalIdentifiers: [placeholderID], options: nil).firstObject
+    }
+
+    /// 單一交易寫入整組照片並加入相簿;回傳主照片(縮圖用)的 localIdentifier
+    private static func writeSet(_ items: [Data],
+                                 primaryIndex: Int,
+                                 album: PHAssetCollection?) async throws -> String {
+        var primaryID = ""
+        try await PHPhotoLibrary.shared().performChanges {
+            var placeholders: [PHObjectPlaceholder] = []
+            for data in items {
+                let request = PHAssetCreationRequest.forAsset()
+                request.addResource(with: .photo, data: data, options: nil)
+                if let placeholder = request.placeholderForCreatedAsset {
+                    placeholders.append(placeholder)
+                }
+            }
+            if placeholders.indices.contains(primaryIndex) {
+                primaryID = placeholders[primaryIndex].localIdentifier
+            }
+            if let album,
+               let change = PHAssetCollectionChangeRequest(for: album) {
+                change.addAssets(placeholders as NSArray)
+            }
+        }
+        guard !primaryID.isEmpty else { throw CaptureError.encodeFailed }
+        return primaryID
     }
 
     /// 先到先贏的逾時:不能用 TaskGroup——group 會等所有子任務結束,
@@ -179,21 +263,6 @@ final class CaptureService {
         return f.string(from: date)
     }
 
-    // MARK: PhotoKit
-
-    private static func writeToPhotoLibrary(_ data: Data) async throws -> String {
-        try await withCheckedThrowingContinuation { cont in
-            var localID = ""
-            PHPhotoLibrary.shared().performChanges({
-                let request = PHAssetCreationRequest.forAsset()
-                request.addResource(with: .photo, data: data, options: nil)
-                localID = request.placeholderForCreatedAsset?.localIdentifier ?? ""
-            }) { success, error in
-                if success { cont.resume(returning: localID) }
-                else { cont.resume(throwing: error ?? CaptureError.encodeFailed) }
-            }
-        }
-    }
 }
 
 extension CLLocation {
