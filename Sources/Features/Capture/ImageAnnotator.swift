@@ -4,6 +4,16 @@ import UIKit
 /// 量測線本身是 RealityKit 3D 實體,ARView 快照已包含,這裡只補標籤。
 enum ImageAnnotator {
 
+    /// 把前景切割(全幅對齊)疊回照片最上層——參照物墊在拍攝物之下
+    static func drawSubjectOnTop(_ subject: UIImage, on image: UIImage) -> UIImage {
+        let renderer = UIGraphicsImageRenderer(size: image.size)
+        return renderer.image { _ in
+            image.draw(at: .zero)
+            subject.draw(in: CGRect(origin: .zero, size: image.size))
+        }
+    }
+
+
     /// 把參照物疊圖(已去背)畫進照片:
     /// 以長邊等比縮放到 longSidePx(對應實際 cm/px),中心對齊指定點,
     /// 可繞中心旋轉(與編輯畫面同角度,所見即所得)。

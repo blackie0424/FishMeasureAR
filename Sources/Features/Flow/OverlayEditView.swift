@@ -55,6 +55,15 @@ struct OverlayEditView: View {
                         .frame(width: geo.size.width, height: geo.size.height)
 
                     referenceOverlay(shot: shot, container: geo.size)
+
+                    // 拍攝物前景蓋回最上層:量魚板墊在下方,可對照刻度
+                    if let cutout = coordinator.subjectCutout {
+                        Image(uiImage: cutout)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: geo.size.width, height: geo.size.height)
+                            .allowsHitTesting(false)
+                    }
                 }
             }
             .coordinateSpace(name: Self.photoSpaceName)
