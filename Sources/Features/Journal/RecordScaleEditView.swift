@@ -14,6 +14,8 @@ struct RecordScaleEditView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var originalImage: UIImage?
+    /// 拍攝物前景(全幅),蓋在參照物之上
+    @State private var subjectCutout: UIImage?
     @State private var reference: ScaleReference?
     @State private var overlayImage: UIImage?
     @State private var center: PlanePoint?
@@ -91,6 +93,14 @@ struct RecordScaleEditView: View {
                         .frame(width: geo.size.width, height: geo.size.height)
 
                     overlayView(imageSize: originalImage.size, container: geo.size)
+
+                    if let subjectCutout {
+                        Image(uiImage: subjectCutout)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: geo.size.width, height: geo.size.height)
+                            .allowsHitTesting(false)
+                    }
                 } else {
                     ProgressView().tint(.white)
                 }
@@ -191,10 +201,8 @@ struct RecordScaleEditView: View {
            let refCM = ref.lengthCM,
            let boardPx = PixelScaleMeasurement.pixelLength(forCM: refCM,
                                                            cmPerPixel: cmPerPx),
-           let gapPx = PixelScaleMeasurement.pixelLength(forCM: 12,
-                                                         cmPerPixel: cmPerPx),
            let placement = OverlayPlacement.boardPlacement(
-               fishA: a, fishB: b, boardLengthPx: boardPx, gapPx: gapPx) {
+               fishA: a, fishB: b, boardLengthPx: boardPx, gapPx: 0) {   // 正墊在拍攝物下
             center = placement.center
             rotationDegrees = placement.rotationDegrees
             rotationBase = placement.rotationDegrees
@@ -230,7 +238,12 @@ struct RecordScaleEditView: View {
             targetSize: PHImageManagerMaximumSize,
             contentMode: .aspectFit,
             options: options) { result, _ in
-            if let result { self.originalImage = result }
+            if let result {
+                self.originalImage = result
+                Task { @MainActor in
+                    self.subjectCutout = await SubjectCutout.extract(from: result)
+                }
+            }
         }
     }
 
@@ -241,12 +254,16 @@ struct RecordScaleEditView: View {
               let reference else { return }
         isSaving = true
         Task { @MainActor in
-            let composed = ImageAnnotator.drawOverlay(
+            var composed = ImageAnnotator.drawOverlay(
                 overlayImage,
                 centeredAt: CGPoint(x: center.x, y: center.y),
                 longSidePx: longSide,
                 rotationDegrees: rotationDegrees,
                 on: original)
+            if let subjectCutout {
+                composed = ImageAnnotator.drawSubjectOnTop(subjectCutout,
+                                                           on: composed)
+            }
 
             let settings = AppSettings()
             let gps: CLLocation? = {

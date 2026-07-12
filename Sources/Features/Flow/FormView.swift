@@ -63,6 +63,15 @@ struct FormView: View {
                         .frame(width: geo.size.width, height: geo.size.height)
 
                     placedOverlayPreview(shot: shot, container: geo.size)
+
+                    if coordinator.overlayReference != nil,
+                       let cutout = coordinator.subjectCutout {
+                        Image(uiImage: cutout)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: geo.size.width, height: geo.size.height)
+                            .allowsHitTesting(false)
+                    }
                 }
 
                 Button("‹ 重新量測") { coordinator.backToAdjustFish() }

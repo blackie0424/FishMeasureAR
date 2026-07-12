@@ -31,6 +31,8 @@ final class MeasureFlowCoordinator: ObservableObject {
     @Published var overlayCenter: PlanePoint?
     /// 疊圖角度(度;兩指旋轉或 90° 快轉鈕),存檔同角度合成
     @Published var overlayRotationDegrees: Double = 0
+    /// 拍攝物前景切割(全幅):疊在參照物之上,讓量魚板墊在拍攝物下方
+    @Published private(set) var subjectCutout: UIImage?
 
     let locationService = LocationService()
     /// 跨畫面共用:AR session 不隨畫面切換銷毀,回到拍攝免重新等待平面偵測
@@ -148,11 +150,9 @@ final class MeasureFlowCoordinator: ObservableObject {
            let refCM = reference.lengthCM,
            let boardPx = PixelScaleMeasurement.pixelLength(forCM: refCM,
                                                            cmPerPixel: cmPerPx),
-           let gapPx = PixelScaleMeasurement.pixelLength(forCM: 12,
-                                                         cmPerPixel: cmPerPx),
            let placement = OverlayPlacement.boardPlacement(
                fishA: shot.fishA, fishB: shot.fishB,
-               boardLengthPx: boardPx, gapPx: gapPx) {
+               boardLengthPx: boardPx, gapPx: 0) {   // 正墊在拍攝物下
             overlayCenter = placement.center
             overlayRotationDegrees = placement.rotationDegrees
         } else if overlayCenter == nil, let shot = currentShot {
@@ -169,6 +169,7 @@ final class MeasureFlowCoordinator: ObservableObject {
         overlayImage = nil
         overlayCenter = nil
         overlayRotationDegrees = 0
+        subjectCutout = nil
     }
 
     // MARK: 拍照(測距儀式:快照已含 3D 點與線段,再合成長度標籤)
@@ -220,6 +221,11 @@ final class MeasureFlowCoordinator: ObservableObject {
                                    arLengthCM: lengthCM, arEndpoints: endpointsPx,
                                    measureMethod: method,
                                    labelOffset: labelOffset)
+                subjectCutout = nil
+                Task { @MainActor in
+                    // 背景先算前景切割,進比例尺編輯時即可用
+                    subjectCutout = await SubjectCutout.extract(from: raw)
+                }
                 flow.shutterPressed()   // → 確認測量線(靜態照片上可微調)
             }
         }
@@ -306,12 +312,17 @@ final class MeasureFlowCoordinator: ObservableObject {
         var referencePhoto: UIImage? = nil
         if let overlayImage, let center = overlayCenter,
            let longSide = overlayLongSidePx {
-            referencePhoto = ImageAnnotator.drawOverlay(
+            var composed = ImageAnnotator.drawOverlay(
                 overlayImage,
                 centeredAt: CGPoint(x: center.x, y: center.y),
                 longSidePx: longSide,
                 rotationDegrees: overlayRotationDegrees,
                 on: original)
+            if let subjectCutout {
+                composed = ImageAnnotator.drawSubjectOnTop(subjectCutout,
+                                                           on: composed)
+            }
+            referencePhoto = composed
             if let id = overlayReference?.id { usedReference.append(id) }
         }
 
