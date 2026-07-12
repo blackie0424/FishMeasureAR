@@ -4,6 +4,36 @@ import UIKit
 /// 量測線本身是 RealityKit 3D 實體,ARView 快照已包含,這裡只補標籤。
 enum ImageAnnotator {
 
+    /// 拍攝物(去背後)合成到數位量魚板:
+    /// 米色畫布 + 板置中 + 前景以(scale, rotation)變換、A 點對齊板頂 0 刻度。
+    static func composeOnBoard(board: UIImage,
+                               subject: UIImage,
+                               fishA: CGPoint,
+                               scale: CGFloat,
+                               rotationDegrees: CGFloat) -> UIImage {
+        let margin: CGFloat = 120
+        let canvas = CGSize(width: board.size.width + margin * 2,
+                            height: board.size.height + margin * 2)
+        let renderer = UIGraphicsImageRenderer(size: canvas)
+        return renderer.image { ctx in
+            UIColor(red: 0.988, green: 0.961, blue: 0.914, alpha: 1).setFill()
+            ctx.fill(CGRect(origin: .zero, size: canvas))
+            board.draw(at: CGPoint(x: margin, y: margin))
+
+            // 0 刻度點 = 板頂緣中線
+            let zero = CGPoint(x: margin + board.size.width / 2, y: margin)
+            let cg = ctx.cgContext
+            cg.saveGState()
+            cg.translateBy(x: zero.x, y: zero.y)
+            cg.rotate(by: rotationDegrees * .pi / 180)
+            cg.scaleBy(x: scale, y: scale)
+            cg.translateBy(x: -fishA.x, y: -fishA.y)
+            subject.draw(at: .zero)
+            cg.restoreGState()
+        }
+    }
+
+
     /// 把前景切割(全幅對齊)疊回照片最上層——參照物墊在拍攝物之下
     static func drawSubjectOnTop(_ subject: UIImage, on image: UIImage) -> UIImage {
         let renderer = UIGraphicsImageRenderer(size: image.size)
