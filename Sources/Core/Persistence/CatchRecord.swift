@@ -1,6 +1,7 @@
 import SwiftData
 import CoreLocation
 import Foundation
+import FishMeasureKit
 
 @Model
 final class CatchRecord {
@@ -28,6 +29,9 @@ final class CatchRecord {
     /// 魚聲錄音檔名(App Documents 下;nil = 未錄)
     var audioFileName: String? = nil
     var referenceObjectsUsed: [String] = []
+    /// 量測端點(原圖像素座標,[ax, ay, bx, by]):
+    /// 供事後替換比例尺物件時換算 cm/px;舊資料為空陣列(功能停用)
+    var fishEndpointsPx: [Double] = []
     /// 之後上傳調查平台用;目前一律 false(⟳ 待傳)
     var isSynced: Bool = false
 
@@ -81,6 +85,21 @@ extension CatchRecord {
         case "manual-scale": return "比例尺換算"
         default:              return measureMethod
         }
+    }
+
+    /// 事後替換比例尺所需資料是否齊全
+    var canEditReference: Bool {
+        lengthCM != nil && fishEndpointsPx.count == 4 && !photoLocalIDs.isEmpty
+    }
+
+    var fishEndpointA: PlanePoint? {
+        fishEndpointsPx.count == 4
+            ? PlanePoint(x: fishEndpointsPx[0], y: fishEndpointsPx[1]) : nil
+    }
+
+    var fishEndpointB: PlanePoint? {
+        fishEndpointsPx.count == 4
+            ? PlanePoint(x: fishEndpointsPx[2], y: fishEndpointsPx[3]) : nil
     }
 
     var lengthLabel: String {

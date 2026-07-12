@@ -78,6 +78,7 @@ struct CatchDetailView: View {
     @Bindable var record: CatchRecord
     @State private var viewerIndex = 0
     @State private var showViewer = false
+    @State private var showScaleEdit = false
 
     var body: some View {
         Form {
@@ -102,6 +103,21 @@ struct CatchDetailView: View {
                 .listRowInsets(EdgeInsets())
             } footer: {
                 Text("點照片可放大檢視").font(.caption2)
+            }
+
+            Section {
+                Button {
+                    showScaleEdit = true
+                } label: {
+                    Label("替換比例尺物件",
+                          systemImage: "arrow.triangle.2.circlepath")
+                }
+                .disabled(!record.canEditReference)
+            } footer: {
+                if !record.canEditReference {
+                    Text("此紀錄缺少量測端點資料(舊版拍攝),無法替換比例尺")
+                        .font(.caption2)
+                }
             }
 
             Section("測量") {
@@ -147,6 +163,9 @@ struct CatchDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .fullScreenCover(isPresented: $showViewer) {
             PhotoViewerScreen(photoIDs: record.allPhotoIDs, startIndex: viewerIndex)
+        }
+        .fullScreenCover(isPresented: $showScaleEdit) {
+            RecordScaleEditView(record: record)
         }
     }
 }

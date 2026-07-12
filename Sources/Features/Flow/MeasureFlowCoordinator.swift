@@ -348,6 +348,8 @@ final class MeasureFlowCoordinator: ObservableObject {
                 photoLocalID: saveResult.primaryID,
                 referenceObjectsUsed: usedReference)
             record.photoLocalIDs = saveResult.allIDs
+            record.fishEndpointsPx = [shot.fishA.x, shot.fishA.y,
+                                      shot.fishB.x, shot.fishB.y]
             let trimmedPlace = placeNote.trimmingCharacters(in: .whitespacesAndNewlines)
             record.placeNote = trimmedPlace.isEmpty ? nil : trimmedPlace
             let trimmedNote = note.trimmingCharacters(in: .whitespacesAndNewlines)

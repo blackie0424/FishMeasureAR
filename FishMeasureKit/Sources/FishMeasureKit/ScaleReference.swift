@@ -37,3 +37,19 @@ public struct ScaleReference: Equatable, Sendable, Identifiable {
         catalog.filter { $0.imageName != nil }
     }
 }
+
+/// 照片組的固定順序與替換規則:0 原圖、1 測量版、2 比例物版。
+public enum PhotoSetLayout {
+    /// 替換(或補上)比例物版照片 ID;空組不動(舊資料防呆)。
+    public static func replacingReferencePhoto(in ids: [String],
+                                               with newID: String) -> [String] {
+        guard !ids.isEmpty else { return ids }
+        var result = ids
+        if result.count >= 3 {
+            result[2] = newID
+        } else {
+            result.append(newID)
+        }
+        return result
+    }
+}
