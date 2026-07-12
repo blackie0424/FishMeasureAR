@@ -185,7 +185,20 @@ struct RecordScaleEditView: View {
 
     private func select(_ ref: ScaleReference) {
         reference = ref
-        if center == nil, let size = originalImage?.size {
+        if ref.alignsZeroToSubject,
+           let a = record.fishEndpointA, let b = record.fishEndpointB,
+           let cmPerPx = cmPerPixel,
+           let refCM = ref.lengthCM,
+           let boardPx = PixelScaleMeasurement.pixelLength(forCM: refCM,
+                                                           cmPerPixel: cmPerPx),
+           let gapPx = PixelScaleMeasurement.pixelLength(forCM: 12,
+                                                         cmPerPixel: cmPerPx),
+           let placement = OverlayPlacement.boardPlacement(
+               fishA: a, fishB: b, boardLengthPx: boardPx, gapPx: gapPx) {
+            center = placement.center
+            rotationDegrees = placement.rotationDegrees
+            rotationBase = placement.rotationDegrees
+        } else if center == nil, let size = originalImage?.size {
             center = PlanePoint(x: size.width * 0.5, y: size.height * 0.78)
         }
         Task { @MainActor in

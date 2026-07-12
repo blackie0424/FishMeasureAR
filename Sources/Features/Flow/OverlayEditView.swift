@@ -125,12 +125,14 @@ struct OverlayEditView: View {
                            isSelected: coordinator.overlayReference == nil,
                            accent: .orange) {
                     coordinator.selectOverlay(nil)
+                    rotationBase = coordinator.overlayRotationDegrees
                 }
                 ForEach(ScaleReference.overlayCatalog) { ref in
                     ChipButton(label: ref.name,
                                isSelected: coordinator.overlayReference?.id == ref.id,
                                accent: .orange) {
                         coordinator.selectOverlay(ref)
+                        rotationBase = coordinator.overlayRotationDegrees
                     }
                 }
                 if coordinator.overlayReference != nil {
