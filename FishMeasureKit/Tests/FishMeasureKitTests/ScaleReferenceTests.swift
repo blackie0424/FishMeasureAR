@@ -42,3 +42,27 @@ final class ScaleReferenceTests: XCTestCase {
         XCTAssertEqual(length("ruler30"), 30.0)
     }
 }
+
+/// 照片組固定順序(0 原圖/1 測量版/2 比例物版)的替換規則
+final class PhotoSetLayoutTests: XCTestCase {
+
+    func testReplacesExistingReferencePhoto() {
+        XCTAssertEqual(PhotoSetLayout.replacingReferencePhoto(
+            in: ["o", "m", "r"], with: "new"), ["o", "m", "new"])
+    }
+
+    func testAppendsWhenNoReferencePhotoYet() {
+        XCTAssertEqual(PhotoSetLayout.replacingReferencePhoto(
+            in: ["o", "m"], with: "new"), ["o", "m", "new"])
+    }
+
+    func testSingleLegacyPhotoAppends() {
+        XCTAssertEqual(PhotoSetLayout.replacingReferencePhoto(
+            in: ["only"], with: "new"), ["only", "new"])
+    }
+
+    func testEmptyStaysEmpty() {
+        XCTAssertEqual(PhotoSetLayout.replacingReferencePhoto(
+            in: [], with: "new"), [])
+    }
+}
