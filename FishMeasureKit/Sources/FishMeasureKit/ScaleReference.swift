@@ -81,3 +81,21 @@ public enum OverlayPlacement {
         return (center, rotation)
     }
 }
+
+/// 拍攝物合成到數位量魚板(不用帶實體板出門):
+/// 把照片座標的魚(A→B)變換到板座標——A 對齊 0 刻度、
+/// 沿板軸(+y,頂→底)向下、依 cm/px 等比縮放。
+public enum BoardComposite {
+    /// - Returns: scale = 照片像素 → 板像素的縮放;
+    ///   rotationDegrees = 將 A→B 方向轉到板軸(+y)所需角度
+    public static func transform(fishA: PlanePoint, fishB: PlanePoint,
+                                 lengthCM: Double, boardPxPerCM: Double)
+        -> (scale: Double, rotationDegrees: Double)? {
+        let dx = fishB.x - fishA.x, dy = fishB.y - fishA.y
+        let dist = (dx * dx + dy * dy).squareRoot()
+        guard dist > 0, lengthCM > 0, boardPxPerCM > 0 else { return nil }
+        let scale = lengthCM * boardPxPerCM / dist
+        let rotation = 90 - atan2(dy, dx) * 180 / Double.pi
+        return (scale, rotation)
+    }
+}
