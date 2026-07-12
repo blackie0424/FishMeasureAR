@@ -28,8 +28,21 @@ final class ScaleReferenceTests: XCTestCase {
         }
         XCTAssertEqual(imageName("lighter"), "ref-lighter")
         XCTAssertEqual(imageName("slipper"), "ref-slipper")
+        XCTAssertEqual(imageName("hand-board"), "ref-hand-board")
         XCTAssertNil(imageName("none"))
         XCTAssertNil(imageName("ruler30"))
+    }
+
+    func testHandBoardEntry() {
+        // 全板 63cm(0→60 刻度 1323px+紅帶 66px,由實拍板量得);
+        // 0 刻度於圖頂端,預設對齊拍攝物
+        let hand = ScaleReference.catalog.first { $0.id == "hand-board" }
+        XCTAssertEqual(hand?.name, "手")
+        XCTAssertEqual(hand?.lengthCM ?? 0, 63.0, accuracy: 1e-9)
+        XCTAssertTrue(hand?.alignsZeroToSubject ?? false)
+        // 其他物件不做零點對齊
+        let lighter = ScaleReference.catalog.first { $0.id == "lighter" }
+        XCTAssertFalse(lighter?.alignsZeroToSubject ?? true)
     }
 
     func testCatalogMatchesARReferenceObjectSizes() {
