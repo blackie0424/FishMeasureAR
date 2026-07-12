@@ -21,6 +21,8 @@ struct RecordScaleEditView: View {
     @State private var center: PlanePoint?
     @State private var rotationDegrees: Double = 0
     @State private var rotationBase: Double = 0
+    /// 相對拖曳的起始中心(手勢開始時記錄)
+    @State private var dragStartCenter: PlanePoint?
     @State private var isSaving = false
     @State private var errorText: String?
 
@@ -139,10 +141,23 @@ struct RecordScaleEditView: View {
                     DragGesture(minimumDistance: 0,
                                 coordinateSpace: .named(Self.spaceName))
                         .onChanged { value in
-                            self.center = ImageFitGeometry.imagePoint(
-                                fromView: value.location,
-                                imageSize: imageSize, container: container)
+                            // 相對拖曳:以手勢起點的中心+位移計算,
+                            // 抓板子任一處都不會讓中心瞬移到手指(跳位 bug)
+                            if dragStartCenter == nil {
+                                dragStartCenter = self.center
+                            }
+                            guard let start = dragStartCenter else { return }
+                            let fitRect = ImageFitGeometry.fitRect(
+                                imageSize: imageSize, in: container)
+                            guard fitRect.width > 0 else { return }
+                            let pxPerPt = imageSize.width / fitRect.width
+                            let x = start.x + value.translation.width * pxPerPt
+                            let y = start.y + value.translation.height * pxPerPt
+                            self.center = PlanePoint(
+                                x: min(max(x, 0), imageSize.width),
+                                y: min(max(y, 0), imageSize.height))
                         }
+                        .onEnded { _ in dragStartCenter = nil }
                 )
                 .position(ImageFitGeometry.viewPoint(fromImage: center,
                                                      imageSize: imageSize,
