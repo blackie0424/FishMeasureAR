@@ -141,7 +141,21 @@ final class MeasureFlowCoordinator: ObservableObject {
             return
         }
         overlayReference = reference
-        if overlayCenter == nil, let shot = currentShot {
+        // 量魚板:預設 0 刻度端對齊 A 點、與量測線平行、偏移一個板寬不遮魚
+        if reference.alignsZeroToSubject,
+           let shot = currentShot,
+           let cmPerPx = shotCMPerPixel,
+           let refCM = reference.lengthCM,
+           let boardPx = PixelScaleMeasurement.pixelLength(forCM: refCM,
+                                                           cmPerPixel: cmPerPx),
+           let gapPx = PixelScaleMeasurement.pixelLength(forCM: 12,
+                                                         cmPerPixel: cmPerPx),
+           let placement = OverlayPlacement.boardPlacement(
+               fishA: shot.fishA, fishB: shot.fishB,
+               boardLengthPx: boardPx, gapPx: gapPx) {
+            overlayCenter = placement.center
+            overlayRotationDegrees = placement.rotationDegrees
+        } else if overlayCenter == nil, let shot = currentShot {
             overlayCenter = PlanePoint(x: shot.image.size.width * 0.5,
                                        y: shot.image.size.height * 0.78)
         }
