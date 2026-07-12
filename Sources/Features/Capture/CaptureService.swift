@@ -111,6 +111,31 @@ final class CaptureService {
         return result
     }
 
+    /// 單張儲存(事後替換比例物版):浮水印依設定,入專屬相簿
+    func saveSingle(image: UIImage, options: PhotoSaveOptions) async throws -> String {
+        let final = options.watermarkEnabled
+            ? addWatermark(to: image, placeName: options.watermarkPlace)
+            : image
+        let data = try encodeJPEGWithMetadata(final, location: options.gpsLocation)
+
+        let rwStatus = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
+        var album: PHAssetCollection?
+        if rwStatus == .authorized {
+            album = try? await Self.fetchOrCreateAlbum(named: Self.albumTitle)
+        } else if rwStatus != .limited {
+            let addStatus = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
+            guard addStatus == .authorized || addStatus == .limited else {
+                throw CaptureError.photoLibraryDenied
+            }
+        }
+        let targetAlbum = album
+        let result = try await withTimeout(seconds: 20) {
+            try await Self.writeSet([data], primaryIndex: 0, album: targetAlbum)
+        }
+        logger.info("saveSingle: done \(result.primaryID)")
+        return result.primaryID
+    }
+
     /// 找到或建立專屬相簿(需 readWrite 完整授權)
     private static func fetchOrCreateAlbum(named title: String) async throws -> PHAssetCollection? {
         let fetch = PHAssetCollection.fetchAssetCollections(with: .album,
