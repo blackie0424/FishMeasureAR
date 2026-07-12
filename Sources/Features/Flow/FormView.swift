@@ -56,7 +56,13 @@ struct FormView: View {
             ZStack(alignment: .topLeading) {
                 Color.black
 
-                if let shot = coordinator.currentShot {
+                if let composite = coordinator.boardComposite,
+                   coordinator.overlayReference?.alignsZeroToSubject == true {
+                    Image(uiImage: composite)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: geo.size.width, height: geo.size.height)
+                } else if let shot = coordinator.currentShot {
                     Image(uiImage: shot.image)
                         .resizable()
                         .scaledToFit()

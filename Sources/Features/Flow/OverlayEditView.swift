@@ -50,7 +50,18 @@ struct OverlayEditView: View {
             ZStack {
                 Color.black
 
-                if let shot = coordinator.currentShot {
+                if coordinator.overlayReference?.alignsZeroToSubject == true {
+                    // 數位量魚板模式:直接顯示合成結果(板為底、拍攝物已去背放上)
+                    if let composite = coordinator.boardComposite {
+                        Image(uiImage: composite)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: geo.size.width, height: geo.size.height)
+                    } else {
+                        ProgressView("分離拍攝物背景中…")
+                            .tint(.white).foregroundStyle(.white)
+                    }
+                } else if let shot = coordinator.currentShot {
                     Image(uiImage: shot.image)
                         .resizable()
                         .scaledToFit()
@@ -138,9 +149,11 @@ struct OverlayEditView: View {
 
     private var bottomControls: some View {
         VStack(spacing: 10) {
-            Text(coordinator.overlayReference == nil
-                 ? "選擇參照物放進照片(依實際尺寸等比);不需要可直接下一步"
-                 : "單指拖移 · 兩指旋轉(或按 ↻ 轉 90°),存檔時合成在同位置")
+            Text(coordinator.overlayReference?.alignsZeroToSubject == true
+                 ? "拍攝物已去背合成到量魚板,吻端對齊 0 刻度"
+                 : (coordinator.overlayReference == nil
+                    ? "選擇參照物放進照片(依實際尺寸等比);不需要可直接下一步"
+                    : "單指拖移 · 兩指旋轉(或按 ↻ 轉 90°),存檔時合成在同位置"))
                 .font(.caption)
                 .foregroundStyle(.white.opacity(0.6))
 

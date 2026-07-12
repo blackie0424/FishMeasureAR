@@ -16,6 +16,8 @@ struct RecordScaleEditView: View {
     @State private var originalImage: UIImage?
     /// 拍攝物前景(全幅),蓋在參照物之上
     @State private var subjectCutout: UIImage?
+    /// 數位量魚板合成(板為底、去背拍攝物放上)
+    @State private var boardComposite: UIImage?
     @State private var reference: ScaleReference?
     @State private var overlayImage: UIImage?
     @State private var center: PlanePoint?
@@ -88,7 +90,17 @@ struct RecordScaleEditView: View {
         GeometryReader { geo in
             ZStack {
                 Color.black
-                if let originalImage {
+                if reference?.alignsZeroToSubject == true {
+                    if let composite = boardComposite {
+                        Image(uiImage: composite)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: geo.size.width, height: geo.size.height)
+                    } else {
+                        ProgressView("分離拍攝物背景中…")
+                            .tint(.white).foregroundStyle(.white)
+                    }
+                } else if let originalImage {
                     Image(uiImage: originalImage)
                         .resizable()
                         .scaledToFit()
@@ -210,6 +222,17 @@ struct RecordScaleEditView: View {
 
     private func select(_ ref: ScaleReference) {
         reference = ref
+        if ref.alignsZeroToSubject {
+            boardComposite = nil
+            Task { @MainActor in
+                if subjectCutout == nil, let original = originalImage {
+                    subjectCutout = await SubjectCutout.extract(from: original)
+                }
+                rebuildBoardComposite()
+            }
+        } else {
+            boardComposite = nil
+        }
         if ref.alignsZeroToSubject,
            let a = record.fishEndpointA, let b = record.fishEndpointB,
            let cmPerPx = cmPerPixel,
@@ -262,11 +285,44 @@ struct RecordScaleEditView: View {
         }
     }
 
+    /// 建立數位量魚板合成(以紀錄端點與長度)
+    private func rebuildBoardComposite() {
+        guard let ref = reference, ref.alignsZeroToSubject,
+              let imageName = ref.imageName,
+              let board = UIImage(named: imageName),
+              let cutout = subjectCutout,
+              let length = record.lengthCM,
+              let a = record.fishEndpointA, let b = record.fishEndpointB,
+              let refCM = ref.lengthCM, refCM > 0,
+              let transform = BoardComposite.transform(
+                  fishA: a, fishB: b, lengthCM: length,
+                  boardPxPerCM: Double(board.size.height) / refCM) else {
+            boardComposite = nil
+            if reference?.alignsZeroToSubject == true, subjectCutout == nil {
+                errorText = "無法分離拍攝物背景,此照片不適用量魚板合成"
+            }
+            return
+        }
+        errorText = nil
+        boardComposite = ImageAnnotator.composeOnBoard(
+            board: board,
+            subject: cutout,
+            fishA: CGPoint(x: a.x, y: a.y),
+            scale: transform.scale,
+            rotationDegrees: transform.rotationDegrees)
+    }
+
     private func saveReplacement() {
+        guard let reference else { return }
+        // 數位量魚板模式:直接存合成結果
+        if reference.alignsZeroToSubject {
+            guard let composite = boardComposite else { return }
+            persist(image: composite, referenceID: reference.id)
+            return
+        }
         guard let original = originalImage,
               let overlayImage, let center,
-              let longSide = overlayLongSidePx,
-              let reference else { return }
+              let longSide = overlayLongSidePx else { return }
         isSaving = true
         Task { @MainActor in
             var composed = ImageAnnotator.drawOverlay(
@@ -279,7 +335,21 @@ struct RecordScaleEditView: View {
                 composed = ImageAnnotator.drawSubjectOnTop(subjectCutout,
                                                            on: composed)
             }
+            persistBody(image: composed, referenceID: reference.id)
+        }
+    }
 
+    /// 共用儲存(相簿+紀錄更新)
+    private func persist(image: UIImage, referenceID: String) {
+        isSaving = true
+        Task { @MainActor in
+            persistBody(image: image, referenceID: referenceID)
+        }
+    }
+
+    @MainActor
+    private func persistBody(image: UIImage, referenceID: String) {
+        Task { @MainActor in
             let settings = AppSettings()
             let gps: CLLocation? = {
                 guard settings.embedGPSInPhoto,
@@ -294,10 +364,10 @@ struct RecordScaleEditView: View {
 
             do {
                 let newID = try await CaptureService()
-                    .saveSingle(image: composed, options: options)
+                    .saveSingle(image: image, options: options)
                 record.photoLocalIDs = PhotoSetLayout.replacingReferencePhoto(
                     in: record.photoLocalIDs, with: newID)
-                record.referenceObjectsUsed = [reference.id]
+                record.referenceObjectsUsed = [referenceID]
                 isSaving = false
                 dismiss()
             } catch {

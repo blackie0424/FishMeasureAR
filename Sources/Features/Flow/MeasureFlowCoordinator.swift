@@ -33,6 +33,9 @@ final class MeasureFlowCoordinator: ObservableObject {
     @Published var overlayRotationDegrees: Double = 0
     /// 拍攝物前景切割(全幅):疊在參照物之上,讓量魚板墊在拍攝物下方
     @Published private(set) var subjectCutout: UIImage?
+    /// 數位量魚板合成(去背拍攝物直接放上板,0 對齊吻端);
+    /// nil = 非板模式或前景切割中/失敗
+    @Published private(set) var boardComposite: UIImage?
 
     let locationService = LocationService()
     /// 跨畫面共用:AR session 不隨畫面切換銷毀,回到拍攝免重新等待平面偵測
@@ -143,7 +146,18 @@ final class MeasureFlowCoordinator: ObservableObject {
             return
         }
         overlayReference = reference
-        // 量魚板:預設 0 刻度端對齊 A 點、與量測線平行、偏移一個板寬不遮魚
+        // 量魚板:去背拍攝物直接合成到數位板上(不用帶實體板出門)
+        if reference.alignsZeroToSubject {
+            boardComposite = nil
+            Task { @MainActor in
+                if subjectCutout == nil, let shot = currentShot {
+                    subjectCutout = await SubjectCutout.extract(from: shot.image)
+                }
+                rebuildBoardComposite()
+            }
+        } else {
+            boardComposite = nil
+        }
         if reference.alignsZeroToSubject,
            let shot = currentShot,
            let cmPerPx = shotCMPerPixel,
@@ -170,6 +184,34 @@ final class MeasureFlowCoordinator: ObservableObject {
         overlayCenter = nil
         overlayRotationDegrees = 0
         subjectCutout = nil
+        boardComposite = nil
+    }
+
+    /// 建立數位量魚板合成(板為底、去背拍攝物等比放上、A 對齊 0 刻度)
+    private func rebuildBoardComposite() {
+        guard let shot = currentShot,
+              let reference = overlayReference, reference.alignsZeroToSubject,
+              let imageName = reference.imageName,
+              let board = UIImage(named: imageName),
+              let cutout = subjectCutout,
+              let length = adjustedLengthCM,
+              let refCM = reference.lengthCM, refCM > 0,
+              let transform = BoardComposite.transform(
+                  fishA: shot.fishA, fishB: shot.fishB,
+                  lengthCM: length,
+                  boardPxPerCM: Double(board.size.height) / refCM) else {
+            boardComposite = nil
+            if overlayReference?.alignsZeroToSubject == true, subjectCutout == nil {
+                showToast("無法分離拍攝物背景,改以疊圖方式顯示")
+            }
+            return
+        }
+        boardComposite = ImageAnnotator.composeOnBoard(
+            board: board,
+            subject: cutout,
+            fishA: CGPoint(x: shot.fishA.x, y: shot.fishA.y),
+            scale: transform.scale,
+            rotationDegrees: transform.rotationDegrees)
     }
 
     // MARK: 拍照(測距儀式:快照已含 3D 點與線段,再合成長度標籤)
@@ -308,9 +350,14 @@ final class MeasureFlowCoordinator: ObservableObject {
         // 三張一組:1. 原圖(乾淨) 2. 含測量線 3. 原圖+比例物
         let original = shot.image
 
-        // 第三張:比例物疊圖(去背圖依 cm/px 等比,使用者擺放的位置與角度)
+        // 第三張:比例物版
         var referencePhoto: UIImage? = nil
-        if let overlayImage, let center = overlayCenter,
+        if let reference = overlayReference, reference.alignsZeroToSubject,
+           let composite = boardComposite {
+            // 數位量魚板:去背拍攝物合成在板上
+            referencePhoto = composite
+            usedReference.append(reference.id)
+        } else if let overlayImage, let center = overlayCenter,
            let longSide = overlayLongSidePx {
             var composed = ImageAnnotator.drawOverlay(
                 overlayImage,
